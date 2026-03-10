@@ -62,6 +62,14 @@ const app = express()
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json({ limit: '2mb' }))
 
+// Health check (for Railway / load balancers)
+app.get('/', (_req, res) => {
+  res.json({ ok: true, service: 'legalmind-api' })
+})
+app.get('/health', (_req, res) => {
+  res.json({ ok: true })
+})
+
 // --- Dev in-memory "DB" ---
 const documents = new Map<string, DocumentRecord>()
 const auditLogs: AuditLog[] = []
@@ -286,7 +294,8 @@ app.get('/api/chat/stream', (req, res) => {
 })
 
 const PORT = Number(process.env.PORT ?? 8787)
-app.listen(PORT, () => {
-  console.log(`LegalMind backend listening on http://localhost:${PORT}`)
+const HOST = process.env.HOST ?? '0.0.0.0'
+app.listen(PORT, HOST, () => {
+  console.log(`LegalMind backend listening on http://${HOST}:${PORT}`)
 })
 

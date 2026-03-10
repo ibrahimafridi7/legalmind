@@ -2,6 +2,8 @@
 
 Full-stack legal research and document assistant: React + Vite frontend, Node.js backend, RAG over legal PDFs.
 
+**Full A-to-Z setup (Auth0, Railway, Vercel, Vercel AI SDK, etc.)** → **[SETUP.md](./SETUP.md)**
+
 ## Structure
 
 - **frontend/** — React (TanStack Query, Zustand), Tailwind, Shadcn-style UI, SSE chat, chunked uploads, RBAC, ErrorBoundary, toasts.
