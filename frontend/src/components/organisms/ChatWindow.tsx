@@ -7,7 +7,7 @@ import { Spinner } from '../atoms/Spinner'
 export const ChatWindow = () => {
   const { activeSessionId } = useSessionStore()
   const sessionId = activeSessionId ?? 'demo'
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useLegalChat(sessionId)
+  const { messages, input, handleInputChange, handleSubmit, isLoading, isStreaming } = useLegalChat(sessionId)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -15,6 +15,9 @@ export const ChatWindow = () => {
         {messages.map((m) => (
           <MessageBubble key={m.id} message={m as any} />
         ))}
+      </div>
+      <div aria-live="polite" style={{ position: 'absolute', left: -9999, top: -9999 }}>
+        {isStreaming ? 'AI is typing' : ''}
       </div>
       <form
         style={{ display: 'flex', gap: '8px', padding: '12px' }}
