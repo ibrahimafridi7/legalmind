@@ -1,7 +1,27 @@
+import { useRef, useCallback, useState, useEffect } from 'react'
+import { VariableSizeList as List } from 'react-window'
 import type { ChatMessageWithCitations } from '../../hooks/useChat'
 import { MessageBubble } from '../molecules/MessageBubble'
 import { Button } from '../atoms/Button'
 import { Spinner } from '../atoms/Spinner'
+
+const ROW_MIN_HEIGHT = 56
+const ROW_HEIGHT_ESTIMATE_PER_CHAR = 0.8
+const LIST_OVERSCAN = 5
+
+function useListHeight(containerRef: React.RefObject<HTMLDivElement | null>) {
+  const [height, setHeight] = useState(400)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const update = () => setHeight(el.getBoundingClientRect().height)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [containerRef])
+  return height
+}
 
 interface ChatWindowProps {
   messages: ChatMessageWithCitations[]
@@ -12,6 +32,11 @@ interface ChatWindowProps {
   isStreaming: boolean
 }
 
+function estimateRowHeight(message: ChatMessageWithCitations): number {
+  const contentLen = (message.content?.length ?? 0) + (message.citations?.length ?? 0) * 30
+  return Math.max(ROW_MIN_HEIGHT, ROW_MIN_HEIGHT + contentLen * ROW_HEIGHT_ESTIMATE_PER_CHAR)
+}
+
 export const ChatWindow = ({
   messages,
   input,
@@ -20,12 +45,51 @@ export const ChatWindow = ({
   isLoading,
   isStreaming
 }: ChatWindowProps) => {
+  const listRef = useRef<List>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const listHeight = useListHeight(containerRef)
+
+  useEffect(() => {
+    if (messages.length > 0 && listRef.current) {
+      listRef.current.resetAfterIndex(0)
+      listRef.current.scrollToItem(messages.length - 1, 'end')
+    }
+  }, [messages.length, isStreaming])
+
+  const getItemSize = useCallback(
+    (index: number) => estimateRowHeight(messages[index]),
+    [messages]
+  )
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ flex: 1, overflowY: 'auto', borderBottom: '1px solid #1e293b', padding: '12px' }}>
-        {messages.map((m) => (
-          <MessageBubble key={m.id} message={m as any} />
-        ))}
+      <div
+        ref={containerRef}
+        className="flex-1 border-b border-slate-800"
+        style={{ minHeight: 0 }}
+      >
+        {messages.length === 0 ? (
+          <div className="flex h-full items-center justify-center p-4 text-sm text-brand-muted">
+            Ask a question about your matter, contract, or regulation.
+          </div>
+        ) : (
+          <List
+            ref={listRef}
+            height={listHeight}
+            width="100%"
+            itemCount={messages.length}
+            itemSize={getItemSize}
+            overscanCount={LIST_OVERSCAN}
+            style={{ overflowX: 'hidden' }}
+            className="scrollbar-thin"
+          >
+            {({ index, style }) => (
+              <div style={{ ...style, padding: '6px 12px' }}>
+                <MessageBubble message={messages[index] as any} />
+              </div>
+            )}
+          </List>
+        )}
       </div>
       <div aria-live="polite" style={{ position: 'absolute', left: -9999, top: -9999 }}>
         {isStreaming ? 'AI is typing' : ''}

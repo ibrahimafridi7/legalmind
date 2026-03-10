@@ -259,7 +259,7 @@ app.get('/api/audit-logs', (req, res) => {
   res.json(auditLogs.slice(0, limit))
 })
 
-// --- Chat streaming (SSE) ---
+// --- Chat streaming (SSE) - legacy GET for custom client ---
 app.get('/api/chat/stream', (req, res) => {
   const q = String(req.query.q ?? '').trim()
   res.setHeader('Content-Type', 'text/event-stream')
@@ -287,6 +287,43 @@ app.get('/api/chat/stream', (req, res) => {
     }
     const delta = tokens[i++]
     res.write(`event: delta\ndata: ${JSON.stringify({ delta })}\n\n`)
+  }, 40)
+
+  req.on('close', () => {
+    clearInterval(interval)
+  })
+})
+
+// --- Chat streaming (Vercel AI SDK text stream protocol) ---
+app.post('/api/chat', async (req, res) => {
+  const body = req.body as { messages?: Array<{ role: string; content: string }> }
+  const messages = Array.isArray(body?.messages) ? body.messages : []
+  const lastUser = messages.filter((m) => m.role === 'user').pop()
+  const q = (lastUser?.content ?? '').trim()
+
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('Transfer-Encoding', 'chunked')
+  res.flushHeaders?.()
+
+  pushAudit('chat.stream.start', undefined, { qLen: q.length, protocol: 'text' })
+
+  const content =
+    q.length === 0
+      ? 'Ask a legal question to start streaming. (This is a dev stub.)'
+      : `Draft answer (dev stub) for: "${q}".\n\nThis will later be grounded using Pinecone + your uploaded documents.\n\nKey point: Vercel AI SDK text stream protocol.`
+
+  const tokens = content.split(/(\s+)/)
+  let i = 0
+
+  const interval = setInterval(() => {
+    if (i >= tokens.length) {
+      clearInterval(interval)
+      res.end()
+      pushAudit('chat.stream.done')
+      return
+    }
+    res.write(tokens[i++])
   }, 40)
 
   req.on('close', () => {

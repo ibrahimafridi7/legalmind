@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { API_BASE_URL } from '../lib/config'
+import { getAuthToken } from '../lib/auth'
 import { useChatMessages, useChatMutation } from '../queries/chatQueries'
 import type { ChatMessageWithCitations, Citation } from '../types/chat.types'
+
+/** Vercel AI SDK text stream protocol: POST /api/chat returns plain text chunks. */
 
 export type { ChatMessageWithCitations } from '../types/chat.types'
 
@@ -70,46 +73,42 @@ export const useLegalChat = (sessionId: string): UseLegalChatResult => {
       )
     }
 
+    const messagesForApi = [
+      ...messages.map((m) => ({ role: m.role, content: m.content })),
+      { role: 'user' as const, content: q }
+    ]
+
     try {
-      const res = await fetch(`${API_BASE_URL}/api/chat/stream?q=${encodeURIComponent(q)}`, {
-        method: 'GET',
+      const token = await getAuthToken()
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
+      const res = await fetch(`${API_BASE_URL}/api/chat`, {
+        method: 'POST',
         signal: ac.signal,
-        headers: { Accept: 'text/event-stream' }
+        headers,
+        body: JSON.stringify({ messages: messagesForApi })
       })
       if (!res.ok || !res.body) throw new Error(`Chat stream failed (${res.status})`)
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
-      let buffer = ''
+      let fullText = ''
 
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
-        buffer += decoder.decode(value, { stream: true })
-
-        const parts = buffer.split('\n\n')
-        buffer = parts.pop() ?? ''
-        for (const part of parts) {
-          const lines = part.split('\n').filter(Boolean)
-          const eventLine = lines.find((l) => l.startsWith('event:')) ?? 'event: message'
-          const event = eventLine.slice('event:'.length).trim()
-          const dataLine = lines.find((l) => l.startsWith('data:')) ?? ''
-          const dataStr = dataLine.slice('data:'.length).trim()
-          if (!dataStr) continue
-          if (event === 'delta') {
-            const payload = JSON.parse(dataStr) as { delta: string }
-            appendDelta(payload.delta)
-          } else if (event === 'done') {
-            setIsStreaming(false)
-            const payload = dataStr ? (JSON.parse(dataStr) as { citations?: Citation[] }) : {}
-            const citations = payload.citations ?? [
-              { id: 'c1', documentId: 'doc1', page: 1, snippet: 'Sample snippet from the document.' },
-              { id: 'c2', documentId: 'doc1', page: 2, snippet: 'Another relevant passage for the answer.' }
-            ]
-            setAssistantCitations(citations)
-          }
-        }
+        const chunk = decoder.decode(value, { stream: true })
+        fullText += chunk
+        appendDelta(chunk)
       }
+
+      setIsStreaming(false)
+      const citations: Citation[] = [
+        { id: 'c1', documentId: 'doc1', page: 1, snippet: 'Sample snippet from the document.' },
+        { id: 'c2', documentId: 'doc1', page: 2, snippet: 'Another relevant passage for the answer.' }
+      ]
+      setAssistantCitations(citations)
     } catch {
       setAssistantContent('Network error. Please retry.')
     } finally {
