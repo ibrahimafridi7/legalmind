@@ -27,6 +27,7 @@ export function App() {
           ...(auth0Config.audience ? { audience: auth0Config.audience } : {})
         }}
         useRefreshTokens={true}
+        cacheLocation="localstorage"
       >
         <Auth0LoadingProvider>
           <QueryClientProvider client={queryClient}>
