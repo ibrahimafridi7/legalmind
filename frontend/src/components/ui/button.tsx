@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '../../lib/utils'
 
@@ -9,7 +10,8 @@ const buttonVariants = cva(
       variant: {
         default: 'bg-brand-action text-white hover:bg-indigo-600',
         secondary: 'bg-slate-800 text-slate-100 hover:bg-slate-700',
-        ghost: 'hover:bg-slate-800'
+        ghost: 'hover:bg-slate-800',
+        outline: 'border border-slate-600 bg-transparent hover:bg-slate-800'
       },
       size: {
         default: 'h-10 px-4 py-2',
@@ -26,11 +28,20 @@ const buttonVariants = cva(
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
+}
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => {
-    return <button ref={ref} className={cn(buttonVariants({ variant, size, className }))} {...props} />
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : 'button'
+    return (
+      <Comp
+        ref={ref}
+        className={cn(buttonVariants({ variant, size, className }))}
+        {...props}
+      />
+    )
   }
 )
 Button.displayName = 'Button'
