@@ -9,11 +9,15 @@ import type { UserRole } from '../../types/user.types'
 /** Wait this long after Auth0 "loaded" before treating user as logged out (lets session restore on refresh) */
 const SESSION_RESTORE_MS = 2200
 
-function Auth0SessionError({ onRetry }: { onRetry: () => void }) {
+function Auth0SessionError({ onRetry, isNetworkError }: { onRetry: () => void; isNetworkError?: boolean }) {
   const { logout } = useAuth0()
   return (
     <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 p-6">
-      <p className="text-sm text-brand-muted">Session could not be loaded.</p>
+      <p className="text-sm text-brand-muted">
+        {isNetworkError
+          ? 'Could not reach the server. Check that the backend is running and try again.'
+          : 'Session could not be loaded.'}
+      </p>
       <div className="flex gap-3">
         <button type="button" className="btn btn-primary" onClick={onRetry}>
           Retry
@@ -66,7 +70,12 @@ export const ProtectedRoute = ({
   }
 
   if (me.isError || !me.data) {
-    if (isAuth0Enabled) return <Auth0SessionError onRetry={() => me.refetch()} />
+    const isNetworkError =
+      me.error &&
+      typeof me.error === 'object' &&
+      'code' in me.error &&
+      (me.error as { code?: string }).code === 'ERR_NETWORK'
+    if (isAuth0Enabled) return <Auth0SessionError onRetry={() => me.refetch()} isNetworkError={!!isNetworkError} />
     return <Navigate to="/login" replace />
   }
 

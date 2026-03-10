@@ -63,11 +63,11 @@ export const ChatWindow = ({
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <div
         ref={containerRef}
         className="flex-1 border-b border-slate-800"
-        style={{ minHeight: 0 }}
+        style={{ minHeight: 0, flex: '1 1 0' }}
       >
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center p-4 text-sm text-brand-muted">
@@ -103,7 +103,7 @@ export const ChatWindow = ({
         }}
       >
         <textarea
-          style={{ flex: 1, minHeight: 48 }}
+          style={{ flex: 1, minHeight: 56, maxHeight: 56, resize: 'none', overflowY: 'auto' }}
           value={input}
           onChange={handleInputChange}
           placeholder="Ask a question about your matter, contract, or regulation…"

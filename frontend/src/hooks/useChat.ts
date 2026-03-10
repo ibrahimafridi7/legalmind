@@ -109,8 +109,15 @@ export const useLegalChat = (sessionId: string): UseLegalChatResult => {
         { id: 'c2', documentId: 'doc1', page: 2, snippet: 'Another relevant passage for the answer.' }
       ]
       setAssistantCitations(citations)
-    } catch {
-      setAssistantContent('Network error. Please retry.')
+    } catch (err) {
+      const isNetworkFailure =
+        err instanceof TypeError ||
+        (err instanceof Error && (err.message.includes('fetch') || err.message.includes('network')))
+      setAssistantContent(
+        isNetworkFailure
+          ? 'Could not reach the server. Check your connection and retry.'
+          : 'Something went wrong. Please try again.'
+      )
     } finally {
       setIsLoading(false)
       setIsStreaming(false)
