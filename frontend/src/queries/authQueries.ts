@@ -10,6 +10,8 @@ export const useMe = (options?: { enabled?: boolean }) =>
       return data
     },
     staleTime: 60_000,
-    enabled: options?.enabled !== false
+    enabled: options?.enabled !== false,
+    retry: 2,
+    retryDelay: 1200
   })
 

@@ -1,9 +1,31 @@
 import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
+import { useAuth0 } from '@auth0/auth0-react'
 import { useMe } from '../../queries/authQueries'
 import { useAuth0Ready } from './Auth0LoadingContext'
 import { isAuth0Enabled } from '../../lib/auth'
 import type { UserRole } from '../../types/user.types'
+
+function Auth0SessionError({ onRetry }: { onRetry: () => void }) {
+  const { logout } = useAuth0()
+  return (
+    <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4 p-6">
+      <p className="text-sm text-brand-muted">Session could not be loaded.</p>
+      <div className="flex gap-3">
+        <button type="button" className="btn btn-primary" onClick={onRetry}>
+          Retry
+        </button>
+        <button
+          type="button"
+          className="btn border border-slate-600 bg-transparent text-slate-300 hover:bg-slate-800"
+          onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+        >
+          Sign out
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export const ProtectedRoute = ({
   children,
@@ -21,6 +43,7 @@ export const ProtectedRoute = ({
   }
 
   if (me.isError || !me.data) {
+    if (isAuth0Enabled) return <Auth0SessionError onRetry={() => me.refetch()} />
     return <Navigate to="/login" replace />
   }
 
