@@ -38,8 +38,9 @@ export const ProtectedRoute = ({
   const ready = !isAuth0Enabled || (!auth0Loading && tokenReady)
   const me = useMe({ enabled: ready })
 
-  // Not logged in (e.g. incognito, direct /chat link): go to login immediately, no "Loading session"
-  if (isAuth0Enabled && !auth0Loading && !isAuthenticated) {
+  // Not logged in: go to login. But if URL has Auth0 callback (?code=), wait for Auth0 to finish — don't redirect yet
+  const isAuth0Callback = typeof window !== 'undefined' && window.location.search.includes('code=')
+  if (isAuth0Enabled && !auth0Loading && !isAuthenticated && !isAuth0Callback) {
     return <Navigate to="/login" replace />
   }
 
