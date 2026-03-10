@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
 
 export type Auth0Ready = { isLoading: boolean; tokenReady: boolean }
@@ -12,10 +12,13 @@ const GIVE_UP_MS = 5000 // then allow useMe anyway so user isn't stuck
 
 /**
  * Must be used inside Auth0Provider. Delays useMe() until we have a token or give up.
+ * Effect deps are only isLoading + isAuthenticated so the 5s timer is not reset every render.
  */
 export function Auth0LoadingProvider({ children }: { children: ReactNode }) {
   const { isLoading, isAuthenticated, getAccessTokenSilently } = useAuth0()
   const [tokenReady, setTokenReady] = useState(false)
+  const getTokenRef = useRef(getAccessTokenSilently)
+  getTokenRef.current = getAccessTokenSilently
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -26,16 +29,14 @@ export function Auth0LoadingProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false
     const giveUpTimer = setTimeout(() => {
-      if (!cancelled) {
-        setTokenReady(true) // allow /me to run so we're not stuck (may 401 → login)
-      }
+      if (!cancelled) setTokenReady(true)
     }, GIVE_UP_MS)
 
     async function tryToken() {
       for (let i = 0; i < MAX_RETRIES; i++) {
         if (cancelled) return
         try {
-          await getAccessTokenSilently()
+          await getTokenRef.current()
           if (!cancelled) setTokenReady(true)
           return
         } catch (e) {
@@ -53,7 +54,7 @@ export function Auth0LoadingProvider({ children }: { children: ReactNode }) {
       cancelled = true
       clearTimeout(giveUpTimer)
     }
-  }, [isLoading, isAuthenticated, getAccessTokenSilently])
+  }, [isLoading, isAuthenticated])
 
   return (
     <Auth0LoadingContext.Provider value={{ isLoading, tokenReady }}>
