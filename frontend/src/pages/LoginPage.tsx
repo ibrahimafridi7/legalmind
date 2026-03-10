@@ -51,4 +51,3 @@ function LoginPageDev() {
 }
 
 export const LoginPage = () => (isAuth0Enabled ? <LoginPageAuth0 /> : <LoginPageDev />)
-

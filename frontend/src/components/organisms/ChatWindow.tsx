@@ -1,5 +1,6 @@
 import { useRef, useCallback, useState, useEffect } from 'react'
 import { VariableSizeList as List } from 'react-window'
+import type { ListChildComponentProps } from 'react-window'
 import type { ChatMessageWithCitations } from '../../hooks/useChat'
 import { MessageBubble } from '../molecules/MessageBubble'
 import { Button } from '../atoms/Button'
@@ -83,7 +84,7 @@ export const ChatWindow = ({
             style={{ overflowX: 'hidden' }}
             className="scrollbar-thin"
           >
-            {({ index, style }) => (
+            {({ index, style }: ListChildComponentProps) => (
               <div style={{ ...style, padding: '6px 12px' }}>
                 <MessageBubble message={messages[index] as any} />
               </div>
