@@ -5,12 +5,12 @@ import { setAuthTokenGetter } from '../../lib/auth'
 /**
  * When Auth0 is used, attaches getAccessTokenSilently to the API module
  * so axios sends the Bearer token on every request (silent refresh when needed).
+ * Set on mount so the first /api/auth/me call after redirect already has the getter.
  */
 export const AuthTokenAttach = () => {
-  const { getAccessTokenSilently, isAuthenticated } = useAuth0()
+  const { getAccessTokenSilently } = useAuth0()
 
   useEffect(() => {
-    if (!isAuthenticated) return
     setAuthTokenGetter(async () => {
       try {
         return await getAccessTokenSilently()
@@ -18,7 +18,7 @@ export const AuthTokenAttach = () => {
         return null
       }
     })
-  }, [getAccessTokenSilently, isAuthenticated])
+  }, [getAccessTokenSilently])
 
   return null
 }

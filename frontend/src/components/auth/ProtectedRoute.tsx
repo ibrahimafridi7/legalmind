@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useMe } from '../../queries/authQueries'
+import { useAuth0Loading } from './Auth0LoadingContext'
+import { isAuth0Enabled } from '../../lib/auth'
 import type { UserRole } from '../../types/user.types'
 
 export const ProtectedRoute = ({
@@ -10,9 +12,10 @@ export const ProtectedRoute = ({
   children: ReactNode
   roles?: UserRole[]
 }) => {
-  const me = useMe()
+  const auth0Loading = isAuth0Enabled && useAuth0Loading()
+  const me = useMe({ enabled: !auth0Loading })
 
-  if (me.isLoading) {
+  if (auth0Loading || me.isLoading) {
     return <div className="p-6 text-sm text-brand-muted">Loading session…</div>
   }
 

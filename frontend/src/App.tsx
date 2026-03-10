@@ -3,6 +3,7 @@ import { Auth0Provider } from '@auth0/auth0-react'
 import { AppRouter } from './router'
 import { SessionSync } from './components/auth/SessionSync'
 import { AuthTokenAttach } from './components/auth/AuthTokenAttach'
+import { Auth0LoadingProvider } from './components/auth/Auth0LoadingContext'
 import { auth0Config, isAuth0Enabled } from './lib/auth'
 
 const queryClient = new QueryClient()
@@ -27,9 +28,11 @@ export function App() {
         }}
         useRefreshTokens={true}
       >
-        <QueryClientProvider client={queryClient}>
-          {queryAndAuth}
-        </QueryClientProvider>
+        <Auth0LoadingProvider>
+          <QueryClientProvider client={queryClient}>
+            {queryAndAuth}
+          </QueryClientProvider>
+        </Auth0LoadingProvider>
       </Auth0Provider>
     )
   }
