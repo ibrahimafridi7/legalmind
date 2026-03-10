@@ -34,9 +34,14 @@ export const ProtectedRoute = ({
   children: ReactNode
   roles?: UserRole[]
 }) => {
-  const { isLoading: auth0Loading, tokenReady } = useAuth0Ready()
+  const { isLoading: auth0Loading, tokenReady, isAuthenticated } = useAuth0Ready()
   const ready = !isAuth0Enabled || (!auth0Loading && tokenReady)
   const me = useMe({ enabled: ready })
+
+  // Not logged in (e.g. incognito, direct /chat link): go to login immediately, no "Loading session"
+  if (isAuth0Enabled && !auth0Loading && !isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
 
   if ((isAuth0Enabled && (auth0Loading || !tokenReady)) || me.isLoading) {
     return <div className="p-6 text-sm text-brand-muted">Loading session…</div>

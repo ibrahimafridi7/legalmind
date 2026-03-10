@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
 
-export type Auth0Ready = { isLoading: boolean; tokenReady: boolean }
+export type Auth0Ready = { isLoading: boolean; tokenReady: boolean; isAuthenticated: boolean }
 
-const defaultReady: Auth0Ready = { isLoading: false, tokenReady: true }
+const defaultReady: Auth0Ready = { isLoading: false, tokenReady: true, isAuthenticated: false }
 const Auth0LoadingContext = createContext<Auth0Ready>(defaultReady)
 
 const RETRY_DELAY_MS = 800
@@ -57,7 +57,7 @@ export function Auth0LoadingProvider({ children }: { children: ReactNode }) {
   }, [isLoading, isAuthenticated])
 
   return (
-    <Auth0LoadingContext.Provider value={{ isLoading, tokenReady }}>
+    <Auth0LoadingContext.Provider value={{ isLoading, tokenReady, isAuthenticated }}>
       {children}
     </Auth0LoadingContext.Provider>
   )
