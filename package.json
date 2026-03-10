@@ -1,0 +1,19 @@
+{
+  "name": "legalmind-ai-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "e2e"
+  ],
+  "scripts": {
+    "dev:frontend": "npm --workspace frontend run dev",
+    "dev:backend": "npm --workspace backend run dev",
+    "dev": "npm run dev:backend & npm run dev:frontend",
+    "build": "npm --workspace frontend run build && npm --workspace backend run build",
+    "test": "npm --workspace frontend test && npm --workspace backend test",
+    "lint": "npm --workspace frontend run lint && npm --workspace backend run lint"
+  }
+}
+
