@@ -6,10 +6,10 @@ interface Props {
 }
 
 export const FileCard = ({ doc }: Props) => (
-  <div className="flex items-center justify-between rounded-lg bg-brand-surface px-4 py-3">
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 10, background: '#020617', padding: '10px 14px', border: '1px solid #1e293b' }}>
     <div>
-      <p className="text-sm font-medium text-slate-100">{doc.name}</p>
-      <p className="text-xs text-brand-muted">Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}</p>
+      <p style={{ fontSize: 14, fontWeight: 500 }}>{doc.name}</p>
+      <p style={{ fontSize: 12, color: '#94a3b8' }}>Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}</p>
     </div>
     <Badge tone={doc.status === 'ready' ? 'success' : doc.status === 'failed' ? 'danger' : 'warning'}>
       {doc.status.toUpperCase()}

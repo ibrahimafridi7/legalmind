@@ -4,13 +4,13 @@ import { SourceCitationPanel } from '../components/organisms/SourceCitationPanel
 
 export const ChatPage = () => {
   return (
-    <div className="flex h-screen">
+    <div className="chat-page">
       <Sidebar />
-      <main className="flex flex-1 flex-row">
-        <section className="flex-1">
+      <main className="chat-main">
+        <section style={{ flex: 1 }}>
           <ChatWindow />
         </section>
-        <section className="w-80 border-l border-slate-800">
+        <section style={{ width: 320, borderLeft: '1px solid #1e293b', padding: 12 }}>
           <SourceCitationPanel citations={[]} />
         </section>
       </main>
