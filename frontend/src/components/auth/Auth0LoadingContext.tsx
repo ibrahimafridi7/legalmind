@@ -6,9 +6,12 @@ export type Auth0Ready = { isLoading: boolean; tokenReady: boolean }
 const defaultReady: Auth0Ready = { isLoading: false, tokenReady: true }
 const Auth0LoadingContext = createContext<Auth0Ready>(defaultReady)
 
+const RETRY_DELAY_MS = 800
+const MAX_RETRIES = 3
+const GIVE_UP_MS = 5000 // then allow useMe anyway so user isn't stuck
+
 /**
- * Must be used inside Auth0Provider. Delays useMe() until Auth0 has finished
- * loading and we've successfully obtained an access token (avoids 401 on first /me).
+ * Must be used inside Auth0Provider. Delays useMe() until we have a token or give up.
  */
 export function Auth0LoadingProvider({ children }: { children: ReactNode }) {
   const { isLoading, isAuthenticated, getAccessTokenSilently } = useAuth0()
@@ -20,9 +23,36 @@ export function Auth0LoadingProvider({ children }: { children: ReactNode }) {
       return
     }
     if (isLoading) return
-    getAccessTokenSilently()
-      .then(() => setTokenReady(true))
-      .catch(() => setTokenReady(false))
+
+    let cancelled = false
+    const giveUpTimer = setTimeout(() => {
+      if (!cancelled) {
+        setTokenReady(true) // allow /me to run so we're not stuck (may 401 → login)
+      }
+    }, GIVE_UP_MS)
+
+    async function tryToken() {
+      for (let i = 0; i < MAX_RETRIES; i++) {
+        if (cancelled) return
+        try {
+          await getAccessTokenSilently()
+          if (!cancelled) setTokenReady(true)
+          return
+        } catch (e) {
+          if (i === MAX_RETRIES - 1) {
+            console.warn('[Auth0] Could not get access token:', e instanceof Error ? e.message : e)
+          }
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS))
+        }
+      }
+      if (!cancelled) setTokenReady(true)
+    }
+    tryToken()
+
+    return () => {
+      cancelled = true
+      clearTimeout(giveUpTimer)
+    }
   }, [isLoading, isAuthenticated, getAccessTokenSilently])
 
   return (
