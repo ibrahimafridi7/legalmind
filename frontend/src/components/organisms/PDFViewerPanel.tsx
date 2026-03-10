@@ -2,25 +2,28 @@ import { Worker, Viewer } from '@react-pdf-viewer/core'
 import '@react-pdf-viewer/core/lib/styles/index.css'
 import { useUIStore } from '../../store/uiStore'
 
-interface Props {
-  fileUrl?: string
-}
+export const PDFViewerPanel = () => {
+  const { selectedPdfUrl, activePdfPage } = useUIStore()
 
-export const PDFViewerPanel = ({ fileUrl }: Props) => {
-  const { activePdfPage } = useUIStore()
-
-  if (!fileUrl) {
+  if (!selectedPdfUrl) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-brand-muted">
-        Select a citation or document to open the PDF.
+      <div className="flex h-full min-h-[200px] items-center justify-center rounded border border-slate-700 bg-slate-900/50 text-sm text-brand-muted">
+        Select a citation to open the PDF and jump to that page.
       </div>
     )
   }
 
+  const initialPage = Math.max(0, activePdfPage - 1)
+
   return (
-    <div className="h-full bg-slate-900">
+    <div className="h-full min-h-[300px] overflow-auto rounded border border-slate-700 bg-slate-900">
       <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js">
-        <Viewer fileUrl={fileUrl} defaultScale={1.1} initialPage={activePdfPage - 1} />
+        <Viewer
+          key={`${selectedPdfUrl}-${initialPage}`}
+          fileUrl={selectedPdfUrl}
+          defaultScale={1.1}
+          initialPage={initialPage}
+        />
       </Worker>
     </div>
   )

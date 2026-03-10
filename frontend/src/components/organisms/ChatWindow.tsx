@@ -1,14 +1,25 @@
-import { useSessionStore } from '../../store/sessionStore'
-import { useLegalChat } from '../../hooks/useChat'
+import type { ChatMessageWithCitations } from '../../hooks/useChat'
 import { MessageBubble } from '../molecules/MessageBubble'
 import { Button } from '../atoms/Button'
 import { Spinner } from '../atoms/Spinner'
 
-export const ChatWindow = () => {
-  const { activeSessionId } = useSessionStore()
-  const sessionId = activeSessionId ?? 'demo'
-  const { messages, input, handleInputChange, handleSubmit, isLoading, isStreaming } = useLegalChat(sessionId)
+interface ChatWindowProps {
+  messages: ChatMessageWithCitations[]
+  input: string
+  handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
+  handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void
+  isLoading: boolean
+  isStreaming: boolean
+}
 
+export const ChatWindow = ({
+  messages,
+  input,
+  handleInputChange,
+  handleSubmit,
+  isLoading,
+  isStreaming
+}: ChatWindowProps) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ flex: 1, overflowY: 'auto', borderBottom: '1px solid #1e293b', padding: '12px' }}>
@@ -23,7 +34,7 @@ export const ChatWindow = () => {
         style={{ display: 'flex', gap: '8px', padding: '12px' }}
         onSubmit={(e) => {
           e.preventDefault()
-          handleSubmit(e as any)
+          handleSubmit(e)
         }}
       >
         <textarea

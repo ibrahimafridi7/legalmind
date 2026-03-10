@@ -1,8 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { API_BASE_URL } from '../lib/config'
 
+import type { Citation } from '../types/chat.types'
+
+export interface ChatMessageWithCitations {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  citations?: Citation[]
+}
+
 interface UseLegalChatResult {
-  messages: { id: string; role: 'user' | 'assistant'; content: string }[]
+  messages: ChatMessageWithCitations[]
   input: string
   isLoading: boolean
   isStreaming: boolean
@@ -82,6 +91,14 @@ export const useLegalChat = (_sessionId: string): UseLegalChatResult => {
             appendDelta(payload.delta)
           } else if (event === 'done') {
             setIsStreaming(false)
+            const payload = dataStr ? (JSON.parse(dataStr) as { citations?: Citation[] }) : {}
+            const citations = payload.citations ?? [
+              { id: 'c1', documentId: 'doc1', page: 1, snippet: 'Sample snippet from the document.' },
+              { id: 'c2', documentId: 'doc1', page: 2, snippet: 'Another relevant passage for the answer.' }
+            ]
+            setMessages((prev) =>
+              prev.map((m) => (m.id === assistantId ? { ...m, citations } : m))
+            )
           }
         }
       }

@@ -1,13 +1,20 @@
 import { useUIStore } from '../../store/uiStore'
 import type { Citation } from '../../types/chat.types'
 import { SourceCard } from '../molecules/SourceCard'
+import { SAMPLE_PDF_URL } from '../../lib/config'
 
 interface Props {
   citations: Citation[]
 }
 
 export const SourceCitationPanel = ({ citations }: Props) => {
-  const { highlightedCitation, setHighlight } = useUIStore()
+  const { highlightedCitation, setHighlight, setActivePdfPage, setSelectedPdfUrl } = useUIStore()
+
+  const onCitationClick = (c: Citation) => {
+    setHighlight(c.id)
+    setActivePdfPage(c.page)
+    setSelectedPdfUrl(SAMPLE_PDF_URL)
+  }
 
   return (
     <section className="h-full border-l border-slate-800 bg-brand-dark/80 p-3">
@@ -18,7 +25,7 @@ export const SourceCitationPanel = ({ citations }: Props) => {
             key={c.id}
             citation={c}
             isActive={highlightedCitation === c.id}
-            onClick={() => setHighlight(c.id)}
+            onClick={() => onCitationClick(c)}
           />
         ))}
         {citations.length === 0 && (
