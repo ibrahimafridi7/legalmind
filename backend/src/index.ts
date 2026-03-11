@@ -244,7 +244,8 @@ app.get('/api/auth/me', async (req, res) => {
 })
 
 // --- Documents ---
-const MAX_PINECONE_DOCS_MERGE = 200
+// Do NOT call getDocumentMetadata() per doc here: each call hits embed API and causes timeout/crash on Render.
+// List only in-memory docs + Pinecone IDs (name = id for Pinecone-only). PDF URL still uses getDocumentMetadata on click.
 app.get('/api/documents', async (req, res) => {
   try {
     const ctx = await getAuditContext(req)
@@ -253,29 +254,18 @@ app.get('/api/documents', async (req, res) => {
     if (usePinecone) {
       try {
         const pineconeIds = await listPineconeDocumentIds()
-        let merged = 0
         for (const id of pineconeIds) {
-          if (merged >= MAX_PINECONE_DOCS_MERGE) break
           if (documents.has(id)) continue
-          try {
-            const meta = await getDocumentMetadata(id)
-            if (meta) {
-              list.push({
-                id,
-                name: meta.docName || id,
-                uploadedAt: '',
-                status: 'ready',
-                s3Key: meta.s3Key
-              })
-              merged++
-            }
-          } catch {
-            // skip this doc, continue
-          }
+          list.push({
+            id,
+            name: id,
+            uploadedAt: '',
+            status: 'ready'
+            // s3Key: fetched on demand in pdf-url when user opens the doc
+          })
         }
       } catch (err) {
         console.warn('[documents] Pinecone list failed:', err instanceof Error ? err.message : err)
-        // still return in-memory list
       }
     }
     res.json(list.sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || '')))
