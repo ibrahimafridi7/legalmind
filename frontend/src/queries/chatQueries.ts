@@ -75,7 +75,10 @@ export function useChatMessages(sessionId: string) {
     queryKey: chatQueryKey(sessionId),
     queryFn: async (): Promise<ChatMessageWithCitations[]> => {
       const fromApi = await fetchMessagesFromApi(sessionId)
-      if (fromApi != null) return fromApi
+      if (fromApi != null) {
+        setStoredMessages(sessionId, fromApi)
+        return fromApi
+      }
       return getStoredMessages(sessionId)
     },
     initialData: () => getStoredMessages(sessionId),

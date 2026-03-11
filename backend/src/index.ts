@@ -630,12 +630,10 @@ app.post('/api/chat', async (req, res) => {
             snippet: c.text.slice(0, 400)
           }
         })
-        const uniqueSources = new Map<string, (typeof resolved)[0]>()
-        resolved.forEach((r) => {
-          const key = `${r.docName}-${r.page}`
-          if (!uniqueSources.has(key)) uniqueSources.set(key, r)
-        })
-        savedCitations = Array.from(uniqueSources.values())
+        const uniqueSources = Array.from(
+          new Map(resolved.map((r) => [`${r.docName}-${r.page}`, r])).values()
+        )
+        savedCitations = uniqueSources.slice(0, 2)
         res.write(JSON.stringify({ citations: savedCitations }) + '\n')
       }
       await streamGroundedAnswer(q, (chunk) => {

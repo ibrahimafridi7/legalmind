@@ -5,9 +5,11 @@ import { toast } from 'sonner'
 
 interface Props {
   message: ChatMessage
+  /** When true, show "AI is typing..." inside this assistant bubble (streaming, no content yet). */
+  isStreamingEmpty?: boolean
 }
 
-export const MessageBubble = ({ message }: Props) => {
+export const MessageBubble = ({ message, isStreamingEmpty }: Props) => {
   const isUser = message.role === 'user'
   const { setHighlight, setActivePdfPage, setSelectedPdfUrl } = useUIStore()
   const citations = message.citations ?? []
@@ -28,8 +30,12 @@ export const MessageBubble = ({ message }: Props) => {
   return (
     <div className={`message-row ${isUser ? 'message-row-user' : ''}`}>
       <div className={`message-bubble ${isUser ? 'message-bubble-user' : 'message-bubble-assistant'}`}>
-        <div className={!isUser ? 'whitespace-pre-wrap break-words' : ''}>{message.content}</div>
-        {!isUser && citations.length > 0 && (
+        {isStreamingEmpty ? (
+          <span className="text-brand-muted text-sm">AI is typing…</span>
+        ) : (
+          <div className={!isUser ? 'whitespace-pre-wrap break-words' : ''}>{message.content}</div>
+        )}
+        {!isUser && !isStreamingEmpty && citations.length > 0 && (
           <div className="mt-3 border-t border-slate-700/50 pt-2">
             <div className="mb-1.5 text-xs font-medium text-brand-muted">Sources</div>
             <div className="flex flex-wrap gap-1.5">
