@@ -52,10 +52,20 @@ export const ChatWindow = ({
   const listHeight = useListHeight(containerRef)
 
   const lastMessageContentLength = messages.length > 0 ? (messages[messages.length - 1]?.content?.length ?? 0) : 0
+
   useEffect(() => {
-    if (messages.length > 0 && listRef.current) {
-      listRef.current.resetAfterIndex(0)
-      listRef.current.scrollToItem(messages.length - 1, 'end')
+    if (messages.length === 0 || !listRef.current) return
+    const list = listRef.current
+    const scrollToBottom = () => {
+      list.resetAfterIndex(0)
+      list.scrollToItem(messages.length - 1, 'end')
+    }
+    scrollToBottom()
+    const rafId = requestAnimationFrame(scrollToBottom)
+    const t = setTimeout(scrollToBottom, 100)
+    return () => {
+      cancelAnimationFrame(rafId)
+      clearTimeout(t)
     }
   }, [messages.length, isStreaming, lastMessageContentLength])
 
