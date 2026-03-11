@@ -518,13 +518,17 @@ app.post('/api/chat', async (req, res) => {
   if (usePinecone) {
     try {
       const citationsPayload = (chunks: RetrievedChunk[]) => {
-        const citations = chunks.map((c, i) => ({
-          id: `${c.documentId}_${i}`,
-          documentId: c.documentId,
-          docName: c.docName,
-          page: c.pageNumber ?? 1,
-          snippet: c.text.slice(0, 400)
-        }))
+        const citations = chunks.map((c, i) => {
+          const resolvedName =
+            (c.docName && c.docName.trim()) || documents.get(c.documentId)?.name || c.documentId
+          return {
+            id: `${c.documentId}_${i}`,
+            documentId: c.documentId,
+            docName: resolvedName,
+            page: c.pageNumber ?? 1,
+            snippet: c.text.slice(0, 400)
+          }
+        })
         res.write(JSON.stringify({ citations }) + '\n')
       }
       await streamGroundedAnswer(q, (chunk) => res.write(chunk), citationsPayload)
