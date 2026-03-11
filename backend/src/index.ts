@@ -619,7 +619,7 @@ app.post('/api/chat', async (req, res) => {
     let savedCitations: Array<{ id: string; documentId: string; docName: string; page: number; snippet: string }> = []
     try {
       const citationsPayload = (chunks: RetrievedChunk[]) => {
-        const citations = chunks.map((c, i) => {
+        const resolved = chunks.map((c, i) => {
           const resolvedName =
             (c.docName && c.docName.trim()) || documents.get(c.documentId)?.name || c.documentId
           return {
@@ -630,8 +630,13 @@ app.post('/api/chat', async (req, res) => {
             snippet: c.text.slice(0, 400)
           }
         })
-        savedCitations = citations
-        res.write(JSON.stringify({ citations }) + '\n')
+        const uniqueSources = new Map<string, (typeof resolved)[0]>()
+        resolved.forEach((r) => {
+          const key = `${r.docName}-${r.page}`
+          if (!uniqueSources.has(key)) uniqueSources.set(key, r)
+        })
+        savedCitations = Array.from(uniqueSources.values())
+        res.write(JSON.stringify({ citations: savedCitations }) + '\n')
       }
       await streamGroundedAnswer(q, (chunk) => {
         streamedContent += chunk

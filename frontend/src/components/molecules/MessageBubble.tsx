@@ -28,19 +28,22 @@ export const MessageBubble = ({ message }: Props) => {
   return (
     <div className={`message-row ${isUser ? 'message-row-user' : ''}`}>
       <div className={`message-bubble ${isUser ? 'message-bubble-user' : 'message-bubble-assistant'}`}>
-        {message.content}
+        <div className={!isUser ? 'whitespace-pre-wrap break-words' : ''}>{message.content}</div>
         {!isUser && citations.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-700/50 pt-2">
-            {citations.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => onCitationClick(c)}
-                className="rounded bg-slate-700/80 px-2 py-1 text-xs text-brand-muted hover:bg-slate-600 hover:text-slate-200"
-              >
-                {c.docName ?? c.documentId} · p.{c.page}
-              </button>
-            ))}
+          <div className="mt-3 border-t border-slate-700/50 pt-2">
+            <div className="mb-1.5 text-xs font-medium text-brand-muted">Sources</div>
+            <div className="flex flex-wrap gap-1.5">
+              {citations.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => onCitationClick(c)}
+                  className="rounded bg-slate-700/80 px-2 py-1 text-xs text-brand-muted hover:bg-slate-600 hover:text-slate-200"
+                >
+                  {c.docName ?? c.documentId} · p.{c.page}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>

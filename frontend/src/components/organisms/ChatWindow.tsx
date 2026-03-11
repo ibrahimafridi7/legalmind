@@ -50,12 +50,13 @@ export const ChatWindow = ({
   const containerRef = useRef<HTMLDivElement>(null)
   const listHeight = useListHeight(containerRef)
 
+  const lastMessageContentLength = messages.length > 0 ? (messages[messages.length - 1]?.content?.length ?? 0) : 0
   useEffect(() => {
     if (messages.length > 0 && listRef.current) {
       listRef.current.resetAfterIndex(0)
       listRef.current.scrollToItem(messages.length - 1, 'end')
     }
-  }, [messages.length, isStreaming])
+  }, [messages.length, isStreaming, lastMessageContentLength])
 
   const getItemSize = useCallback(
     (index: number) => estimateRowHeight(messages[index]),
@@ -96,9 +97,9 @@ export const ChatWindow = ({
         role="status"
         aria-live="polite"
         aria-atomic="true"
-        className="chat-typing-status"
+        className="chat-typing-status min-h-[1.25rem] text-sm text-brand-muted"
       >
-        {isStreaming ? 'AI is typing…' : '\u00A0'}
+        {isStreaming && lastMessageContentLength === 0 ? 'AI is typing…' : '\u00A0'}
       </div>
       <form
         style={{ display: 'flex', gap: '8px', padding: '12px', flexShrink: 0 }}

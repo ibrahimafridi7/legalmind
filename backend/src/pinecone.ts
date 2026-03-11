@@ -322,7 +322,19 @@ export async function streamGroundedAnswer(
       ? chunks.map((c) => `[${c.docName}]\n${c.text}`).join('\n\n---\n\n')
       : 'No relevant documents found.'
 
-  const systemPrompt = `You are a legal research assistant. Answer the user's question using ONLY the following context from their uploaded documents. If the context does not contain enough information, say so. Cite the document name when relevant.\n\nContext:\n${context}`
+  const systemPrompt = `You are a legal document assistant. Answer ONLY using the provided context below. Do not use external knowledge or other documents.
+
+If the answer cannot be found in the context, respond exactly: "I could not find this information in the uploaded documents."
+
+Include document names when citing. Put your answer first, then cite sources.
+
+Context:
+${context}
+
+Question:
+${query}
+
+Answer with citations based only on the context above.`
 
   if (useOpenRouter) {
     const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
