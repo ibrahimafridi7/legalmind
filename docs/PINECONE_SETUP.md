@@ -158,6 +158,26 @@ Full list: [OpenRouter Models – Embeddings](https://openrouter.ai/models?outpu
 
 ---
 
+## Troubleshooting: `document.indexed` status `failed`
+
+Agar audit log mein **`document.indexed`** **`"status":"failed"`** dikhe, toh ab usi entry mein **`error`** field bhi aata hai (actual failure reason). Server console par bhi `[pinecone] index error:` log hota hai.
+
+**Common causes:**
+
+| Error / symptom | Fix |
+|-----------------|-----|
+| **S3** – `NoSuchKey`, `AccessDenied`, wrong bucket | Check `S3_BUCKET`, IAM key permissions (s3:GetObject), aur presign/confirm-upload ke baad object same key par maujood ho. |
+| **Empty S3 body** | File S3 par upload ho chuki hai confirm; retry ya check bucket. |
+| **pdf-parse** fails / no text | File valid PDF nahi ya corrupt; try another PDF. |
+| **OpenAI embed** – 401/429 | `OPENAI_API_KEY` valid ho, billing on ho. |
+| **Ollama embed** – connection refused / 404 | `OLLAMA_BASE_URL` sahi ho (e.g. `http://localhost:11434`), `nomic-embed-text` (ya set model) run ho. Index dimension **768** hona chahiye. |
+| **OpenRouter embed** – 401/402/429 | `OPENROUTER_API_KEY` valid; embed model (e.g. `openai/text-embedding-3-small`) OpenRouter pe available ho. Index dimension **1536**. |
+| **Pinecone** – index not found / dimension mismatch | Pinecone dashboard se index name (`PINECONE_INDEX`) aur dimension check karein: OpenAI/OpenRouter 1536, Ollama 768. |
+
+Audit log ki `document.indexed` entry mein **`error`** dekh kar exact reason fix karein.
+
+---
+
 ## Vector status (SSE + webhook)
 
 Jab document indexing **ready** ya **failed** ho jata hai, backend UI ko turant bata sakta hai (polling ki zaroorat kam).

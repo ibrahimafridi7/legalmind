@@ -107,7 +107,7 @@ export async function indexDocumentFromS3(
   s3Key: string,
   s3Client: S3Client,
   bucket: string,
-  onStatus?: (status: 'indexing' | 'ready' | 'failed') => void
+  onStatus?: (status: 'indexing' | 'ready' | 'failed', errorMessage?: string) => void
 ): Promise<void> {
   if (!pinecone || (!openai && !useOllama && !useOpenRouter)) {
     onStatus?.('ready')
@@ -150,8 +150,9 @@ export async function indexDocumentFromS3(
     )
     onStatus?.('ready')
   } catch (err) {
-    console.error('[pinecone] index error:', err)
-    onStatus?.('failed')
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[pinecone] index error:', documentId, msg, err)
+    onStatus?.('failed', msg)
   }
 }
 

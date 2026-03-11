@@ -251,12 +251,12 @@ app.post('/api/documents/:documentId/confirm-upload', (req, res) => {
       doc.s3Key,
       s3Client,
       S3_BUCKET,
-      (status) => {
+      (status, errorMessage) => {
         const current = documents.get(documentId)
         if (!current) return
         current.status = status
         documents.set(documentId, current)
-        pushAudit('document.indexed', undefined, { documentId, status })
+        pushAudit('document.indexed', undefined, { documentId, status, ...(errorMessage && { error: errorMessage }) })
         if (status === 'ready' || status === 'failed') broadcastDocumentStatus(documentId, status)
       }
     )
