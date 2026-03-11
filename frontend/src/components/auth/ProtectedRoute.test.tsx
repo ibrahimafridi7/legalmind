@@ -27,6 +27,7 @@ function wrapper(initialEntry = '/chat') {
   )
 }
 
+// Mock session (useMe) to test Protected Routes without real SSO tokens.
 vi.mock('../../queries/authQueries', () => ({
   useMe: vi.fn()
 }))

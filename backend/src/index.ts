@@ -3,12 +3,31 @@ import cors from 'cors'
 import { z } from 'zod'
 import jwksClient from 'jwks-rsa'
 import jwt from 'jsonwebtoken'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 type Role = 'admin' | 'partner' | 'associate' | 'paralegal' | 'guest'
 
 const AUTH0_DOMAIN = process.env.AUTH0_DOMAIN
 const AUTH0_AUDIENCE = process.env.AUTH0_AUDIENCE
 const useAuth0 = Boolean(AUTH0_DOMAIN && AUTH0_AUDIENCE)
+
+const USE_S3 =
+  process.env.USE_S3 === 'true' &&
+  process.env.AWS_REGION &&
+  process.env.AWS_ACCESS_KEY_ID &&
+  process.env.AWS_SECRET_ACCESS_KEY &&
+  process.env.S3_BUCKET
+const s3Client = USE_S3
+  ? new S3Client({
+      region: process.env.AWS_REGION!,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!
+      }
+    })
+  : null
+const S3_BUCKET = process.env.S3_BUCKET ?? ''
 
 const jwks = useAuth0
   ? jwksClient({ jwksUri: `https://${AUTH0_DOMAIN}/.well-known/jwks.json`, cache: true })
@@ -129,8 +148,7 @@ app.get('/api/documents', (_req, res) => {
   res.json(Array.from(documents.values()).sort((a, b) => (a.uploadedAt < b.uploadedAt ? 1 : -1)))
 })
 
-app.post('/api/documents/presign', (req, res) => {
-  // This endpoint is shaped like "S3 presign", but returns a LOCAL upload URL for dev.
+app.post('/api/documents/presign', async (req, res) => {
   const schema = z.object({
     filename: z.string().min(1),
     contentType: z.string().min(1),
@@ -149,15 +167,49 @@ app.post('/api/documents/presign', (req, res) => {
   documents.set(docId, record)
   pushAudit('document.presign', undefined, { docId, filename: body.filename })
 
+  if (s3Client && S3_BUCKET) {
+    const key = `uploads/${docId}/${body.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const command = new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: key,
+      ContentType: body.contentType
+    })
+    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 900 })
+    return res.json({
+      documentId: docId,
+      uploadUrl,
+      method: 'PUT' as const,
+      headers: { 'Content-Type': body.contentType },
+      uploadCompleteEndpoint: `/api/documents/${docId}/confirm-upload`
+    })
+  }
+
   res.json({
     documentId: docId,
-    // In prod: return an S3 pre-signed PUT URL.
     uploadUrl: `http://localhost:${process.env.PORT ?? 8787}/api/uploads/${docId}`,
-    method: 'PUT',
-    headers: {
-      'Content-Type': body.contentType
-    }
+    method: 'PUT' as const,
+    headers: { 'Content-Type': body.contentType }
   })
+})
+
+app.post('/api/documents/:documentId/confirm-upload', (req, res) => {
+  const { documentId } = req.params
+  const doc = documents.get(documentId)
+  if (!doc) return res.status(404).json({ error: 'document not found' })
+
+  doc.status = 'indexing'
+  documents.set(documentId, doc)
+  pushAudit('document.uploaded.s3', undefined, { documentId })
+
+  setTimeout(() => {
+    const current = documents.get(documentId)
+    if (!current) return
+    current.status = 'ready'
+    documents.set(documentId, current)
+    pushAudit('document.indexed', undefined, { documentId })
+  }, 2500)
+
+  res.status(200).json({ ok: true, status: 'indexing' })
 })
 
 // Local dev upload target for "presigned" URL. Accepts raw bytes.

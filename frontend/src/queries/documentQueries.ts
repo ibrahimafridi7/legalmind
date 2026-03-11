@@ -13,7 +13,14 @@ export const useDocuments = () =>
   })
 
 type PresignRequest = { filename: string; contentType: string; sizeBytes?: number }
-type PresignResponse = { documentId: string; uploadUrl: string; method: 'PUT'; headers: Record<string, string> }
+export type PresignResponse = {
+  documentId: string
+  uploadUrl: string
+  method: 'PUT'
+  headers: Record<string, string>
+  /** When present (e.g. S3), client must POST here after successful upload. */
+  uploadCompleteEndpoint?: string
+}
 
 export const usePresignUpload = () => {
   const qc = useQueryClient()

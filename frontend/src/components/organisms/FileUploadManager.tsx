@@ -3,6 +3,7 @@ import { canUpload } from '../../lib/rbac'
 import { useSessionStore } from '../../store/sessionStore'
 import { usePresignUpload, useDocuments } from '../../queries/documentQueries'
 import { uploadFileInChunks, uploadFileWithProgress } from '../../lib/chunkedUpload'
+import api from '../../lib/api'
 import { useState } from 'react'
 import { FileCard } from '../molecules/FileCard'
 import { toast } from 'sonner'
@@ -20,7 +21,7 @@ export const FileUploadManager = () => {
       <UploadDropzone
         onFilesAccepted={async (files) => {
           for (const file of files) {
-            let presigned: { documentId: string; uploadUrl: string; headers: Record<string, string> }
+            let presigned: Awaited<ReturnType<typeof presign.mutateAsync>>
             try {
               presigned = await presign.mutateAsync({
                 filename: file.name,
@@ -34,8 +35,9 @@ export const FileUploadManager = () => {
 
             setProgress((p) => ({ ...p, [presigned.documentId]: 0 }))
 
-            // If file is large, use chunk endpoint for resilience.
-            const useChunks = file.size > 8 * 1024 * 1024
+            const isS3Upload = Boolean(presigned.uploadCompleteEndpoint)
+            // S3: single PUT only. Local: chunk for large files.
+            const useChunks = !isS3Upload && file.size > 8 * 1024 * 1024
             try {
               if (useChunks) {
                 await uploadFileInChunks({
@@ -51,6 +53,9 @@ export const FileUploadManager = () => {
                   headers: presigned.headers,
                   onProgress: (pct) => setProgress((p) => ({ ...p, [presigned.documentId]: pct }))
                 })
+              }
+              if (presigned.uploadCompleteEndpoint) {
+                await api.post(presigned.uploadCompleteEndpoint)
               }
               toast.success('Upload complete')
             } catch {

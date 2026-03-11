@@ -19,7 +19,7 @@ ReactDOM.createRoot(document.getElementById('app') as HTMLElement).render(
               resetErrorBoundary()
             }}
           >
-            Reset
+            Reset Chat
           </button>
         </div>
       )}

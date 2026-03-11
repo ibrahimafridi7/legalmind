@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { SourceCard } from './SourceCard'
 
+/** Ensures the source/citation link correctly triggers the PDF highlight handler (onClick). */
 test('clicking a citation triggers handler', async () => {
   const user = userEvent.setup()
   const onClick = vi.fn()
