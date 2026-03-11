@@ -39,7 +39,7 @@ export const SourceCitationPanel = ({ citations }: Props) => {
           />
         ))}
         {citations.length === 0 && (
-          <p className="text-xs text-brand-muted">Citations from uploaded documents will appear here.</p>
+          <p className="text-xs text-brand-muted">Sources for the current response will appear here when the AI uses your documents.</p>
         )}
       </div>
     </section>
