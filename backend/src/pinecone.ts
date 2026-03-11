@@ -261,6 +261,30 @@ export async function queryPinecone(query: string): Promise<RetrievedChunk[]> {
     })
 }
 
+/** List unique document IDs present in Pinecone (for document list after server restart). */
+export async function listPineconeDocumentIds(): Promise<string[]> {
+  if (!pinecone) return []
+  const index = pinecone.index(PINECONE_INDEX_NAME)
+  const ns = index.namespace(NAMESPACE)
+  const docIds = new Set<string>()
+  let paginationToken: string | undefined
+  do {
+    const result = await ns.listPaginated({
+      limit: 500,
+      ...(paginationToken && { paginationToken })
+    })
+    const vectors = (result as { vectors?: Array<{ id?: string }> }).vectors ?? []
+    for (const v of vectors) {
+      if (v.id) {
+        const documentId = v.id.replace(/_\d+$/, '')
+        if (documentId) docIds.add(documentId)
+      }
+    }
+    paginationToken = (result as { pagination?: { next?: string } }).pagination?.next
+  } while (paginationToken)
+  return Array.from(docIds)
+}
+
 /** Fetch document metadata from Pinecone (docName, s3Key) for pdf-url when not in app memory. */
 export async function getDocumentMetadata(
   documentId: string

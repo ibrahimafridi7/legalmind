@@ -10,8 +10,10 @@ import {
   indexDocumentFromS3,
   streamGroundedAnswer,
   getDocumentMetadata,
+  listPineconeDocumentIds,
   type RetrievedChunk
 } from './pinecone.js'
+import { useDb, getChatMessages, insertChatMessage } from './db.js'
 
 type Role = 'admin' | 'partner' | 'associate' | 'paralegal' | 'guest'
 
@@ -224,7 +226,24 @@ app.get('/api/auth/me', async (req, res) => {
 app.get('/api/documents', async (req, res) => {
   const ctx = await getAuditContext(req)
   pushAudit('document.list', ctx.actorEmail, {}, { ip: ctx.ip, actorId: ctx.actorId })
-  res.json(Array.from(documents.values()).sort((a, b) => (a.uploadedAt < b.uploadedAt ? 1 : -1)))
+  const list: DocumentRecord[] = Array.from(documents.values())
+  if (usePinecone) {
+    const pineconeIds = await listPineconeDocumentIds()
+    for (const id of pineconeIds) {
+      if (documents.has(id)) continue
+      const meta = await getDocumentMetadata(id)
+      if (meta) {
+        list.push({
+          id,
+          name: meta.docName || id,
+          uploadedAt: '',
+          status: 'ready',
+          s3Key: meta.s3Key
+        })
+      }
+    }
+  }
+  res.json(list.sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || '')))
 })
 
 // SSE stream for document indexing status (ready/failed). Clients subscribe to avoid polling.
@@ -508,12 +527,44 @@ app.get('/api/chat/stream', (req, res) => {
   })
 })
 
+// --- Chat history (PostgreSQL); optional when DATABASE_URL is set ---
+app.get('/api/chat/sessions/:sessionId/messages', async (req, res) => {
+  if (!useDb) return res.status(503).json({ error: 'Chat history not persisted (DATABASE_URL not set)' })
+  const { sessionId } = req.params
+  if (!sessionId?.trim()) return res.status(400).json({ error: 'sessionId required' })
+  try {
+    const rows = await getChatMessages(sessionId.trim())
+    const list = rows.map((r) => ({
+      id: r.id,
+      role: r.role as 'user' | 'assistant',
+      content: r.content,
+      citations: r.citations ?? undefined
+    }))
+    res.json(list)
+  } catch (err) {
+    console.warn('[chat] get messages:', err)
+    res.status(500).json({ error: 'Failed to load chat history' })
+  }
+})
+
 // --- Chat streaming (Vercel AI SDK text stream protocol) ---
 app.post('/api/chat', async (req, res) => {
-  const body = req.body as { messages?: Array<{ role: string; content: string }> }
+  const body = req.body as {
+    sessionId?: string
+    messages?: Array<{ role: string; content: string }>
+  }
   const messages = Array.isArray(body?.messages) ? body.messages : []
   const lastUser = messages.filter((m) => m.role === 'user').pop()
   const q = (lastUser?.content ?? '').trim()
+  const sessionId = typeof body?.sessionId === 'string' ? body.sessionId.trim() : undefined
+
+  if (useDb && sessionId && lastUser?.content) {
+    try {
+      await insertChatMessage(sessionId, 'user', lastUser.content)
+    } catch (err) {
+      console.warn('[chat] save user message:', err)
+    }
+  }
 
   res.setHeader('Content-Type', 'text/plain; charset=utf-8')
   res.setHeader('Cache-Control', 'no-cache, no-transform')
@@ -530,6 +581,8 @@ app.post('/api/chat', async (req, res) => {
   }
 
   if (usePinecone) {
+    let streamedContent = ''
+    let savedCitations: Array<{ id: string; documentId: string; docName: string; page: number; snippet: string }> = []
     try {
       const citationsPayload = (chunks: RetrievedChunk[]) => {
         const citations = chunks.map((c, i) => {
@@ -543,9 +596,20 @@ app.post('/api/chat', async (req, res) => {
             snippet: c.text.slice(0, 400)
           }
         })
+        savedCitations = citations
         res.write(JSON.stringify({ citations }) + '\n')
       }
-      await streamGroundedAnswer(q, (chunk) => res.write(chunk), citationsPayload)
+      await streamGroundedAnswer(q, (chunk) => {
+        streamedContent += chunk
+        res.write(chunk)
+      }, citationsPayload)
+      if (useDb && sessionId && streamedContent) {
+        try {
+          await insertChatMessage(sessionId, 'assistant', streamedContent, savedCitations)
+        } catch (err) {
+          console.warn('[chat] save assistant message:', err)
+        }
+      }
     } catch (err) {
       console.warn('[chat] Pinecone/OpenAI error:', err)
       res.write('Sorry, I could not generate an answer right now. Please try again.')
@@ -561,6 +625,11 @@ app.post('/api/chat', async (req, res) => {
   const interval = setInterval(() => {
     if (i >= tokens.length) {
       clearInterval(interval)
+      if (useDb && sessionId && content) {
+        insertChatMessage(sessionId, 'assistant', content).catch((err) =>
+          console.warn('[chat] save assistant message:', err)
+        )
+      }
       res.end()
       pushAudit('chat.stream.done')
       return

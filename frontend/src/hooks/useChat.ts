@@ -87,7 +87,7 @@ export const useLegalChat = (sessionId: string): UseLegalChatResult => {
         method: 'POST',
         signal: ac.signal,
         headers,
-        body: JSON.stringify({ messages: messagesForApi })
+        body: JSON.stringify({ sessionId, messages: messagesForApi })
       })
       if (!res.ok || !res.body) throw new Error(`Chat stream failed (${res.status})`)
 
