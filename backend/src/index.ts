@@ -108,6 +108,29 @@ const uploadChunks = new Map<
   }
 >()
 
+// --- Vector status: notify UI (SSE) and optional outbound webhook ---
+const statusStreamClients = new Set<express.Response>()
+const VECTOR_STATUS_WEBHOOK_URL = process.env.VECTOR_STATUS_WEBHOOK_URL?.trim() || null
+
+function broadcastDocumentStatus(documentId: string, status: 'ready' | 'failed') {
+  const payload = { documentId, status, at: new Date().toISOString() }
+  const sse = `event: document_indexed\ndata: ${JSON.stringify(payload)}\n\n`
+  statusStreamClients.forEach((res) => {
+    try {
+      res.write(sse)
+    } catch {
+      statusStreamClients.delete(res)
+    }
+  })
+  if (VECTOR_STATUS_WEBHOOK_URL) {
+    fetch(VECTOR_STATUS_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch((err) => console.warn('[webhook] vector status:', err?.message))
+  }
+}
+
 function id(prefix: string) {
   return `${prefix}_${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`
 }
@@ -153,6 +176,17 @@ app.get('/api/auth/me', async (req, res) => {
 // --- Documents ---
 app.get('/api/documents', (_req, res) => {
   res.json(Array.from(documents.values()).sort((a, b) => (a.uploadedAt < b.uploadedAt ? 1 : -1)))
+})
+
+// SSE stream for document indexing status (ready/failed). Clients subscribe to avoid polling.
+app.get('/api/documents/status-stream', (_req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders?.()
+  statusStreamClients.add(res)
+  res.on('close', () => statusStreamClients.delete(res))
+  res.on('finish', () => statusStreamClients.delete(res))
 })
 
 app.post('/api/documents/presign', async (req, res) => {
@@ -223,6 +257,7 @@ app.post('/api/documents/:documentId/confirm-upload', (req, res) => {
         current.status = status
         documents.set(documentId, current)
         pushAudit('document.indexed', undefined, { documentId, status })
+        if (status === 'ready' || status === 'failed') broadcastDocumentStatus(documentId, status)
       }
     )
   } else {
@@ -232,6 +267,7 @@ app.post('/api/documents/:documentId/confirm-upload', (req, res) => {
       current.status = 'ready'
       documents.set(documentId, current)
       pushAudit('document.indexed', undefined, { documentId })
+      broadcastDocumentStatus(documentId, 'ready')
     }, 2500)
   }
 
@@ -251,13 +287,13 @@ app.put(
     documents.set(documentId, doc)
     pushAudit('document.uploaded', undefined, { documentId, bytes: (req.body as Buffer).byteLength })
 
-    // Simulate async indexing (vectorization) completing a moment later.
     setTimeout(() => {
       const current = documents.get(documentId)
       if (!current) return
       current.status = 'ready'
       documents.set(documentId, current)
       pushAudit('document.indexed', undefined, { documentId })
+      broadcastDocumentStatus(documentId, 'ready')
     }, 2500)
 
     res.status(200).end()
@@ -313,6 +349,7 @@ app.put(
         current.status = 'ready'
         documents.set(documentId, current)
         pushAudit('document.indexed', undefined, { documentId })
+        broadcastDocumentStatus(documentId, 'ready')
       }, 2500)
     }
 

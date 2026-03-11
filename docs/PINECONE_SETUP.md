@@ -155,3 +155,12 @@ Full list: [OpenRouter Models – Embeddings](https://openrouter.ai/models?outpu
 4. Backend restart karein.
 
 **Summary:** OpenRouter API key + free chat model = free chat. Embeddings ke liye OpenRouter pe supported embed model (e.g. `openai/text-embedding-3-small`) set karein; dedicated free embed option OpenRouter pe abhi nahi hai.
+
+---
+
+## Vector status (SSE + webhook)
+
+Jab document indexing **ready** ya **failed** ho jata hai, backend UI ko turant bata sakta hai (polling ki zaroorat kam).
+
+- **SSE stream:** Frontend Documents page `GET /api/documents/status-stream` se connect karti hai. Jab koi document ready/failed hota hai, server `document_indexed` event bhejta hai; client document list invalidate karke refresh kar leta hai.
+- **Optional webhook:** Agar `VECTOR_STATUS_WEBHOOK_URL` backend `.env` mein set hai, toh har ready/failed par backend us URL par **POST** karega (JSON: `{ documentId, status, at }`). Use apne dashboard ya logging ke liye kar sakte ho.

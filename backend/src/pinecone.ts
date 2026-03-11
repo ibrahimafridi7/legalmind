@@ -92,7 +92,9 @@ async function embed(texts: string[]): Promise<number[][]> {
       model: EMBEDDING_MODEL,
       input: texts
     })
-    return data.sort((a, b) => a.index - b.index).map((d) => d.embedding)
+    return data
+      .sort((a: { index: number }, b: { index: number }) => a.index - b.index)
+      .map((d: { embedding: number[] }) => d.embedding)
   }
   if (useOpenRouter) return embedOpenRouter(texts)
   if (useOllama) return embedOllama(texts)
@@ -180,10 +182,11 @@ export async function queryPinecone(query: string): Promise<RetrievedChunk[]> {
     topK: TOP_K,
     includeMetadata: true
   })
-  const matches = result.matches ?? []
+  type Match = { metadata?: { text?: unknown; documentId?: unknown; docName?: unknown }; score?: number }
+  const matches = (result.matches ?? []) as Match[]
   return matches
-    .filter((m) => m.metadata?.text && m.metadata?.documentId)
-    .map((m) => ({
+    .filter((m: Match) => m.metadata?.text && m.metadata?.documentId)
+    .map((m: Match) => ({
       documentId: String(m.metadata!.documentId),
       docName: String(m.metadata!.docName ?? ''),
       text: String(m.metadata!.text),

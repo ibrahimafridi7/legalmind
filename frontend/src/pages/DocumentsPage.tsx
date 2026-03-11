@@ -1,7 +1,9 @@
 import { Sidebar } from '../components/organisms/Sidebar'
 import { FileUploadManager } from '../components/organisms/FileUploadManager'
+import { useDocumentStatusStream } from '../queries/documentQueries'
 
 export const DocumentsPage = () => {
+  useDocumentStatusStream(true)
   return (
     <div className="layout-root">
       <Sidebar />
