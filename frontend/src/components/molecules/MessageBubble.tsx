@@ -1,6 +1,7 @@
-import type { ChatMessage } from '../../types/chat.types'
+import type { ChatMessage, Citation } from '../../types/chat.types'
 import { useUIStore } from '../../store/uiStore'
-import { SAMPLE_PDF_URL } from '../../lib/config'
+import api from '../../lib/api'
+import { toast } from 'sonner'
 
 interface Props {
   message: ChatMessage
@@ -11,10 +12,17 @@ export const MessageBubble = ({ message }: Props) => {
   const { setHighlight, setActivePdfPage, setSelectedPdfUrl } = useUIStore()
   const citations = message.citations ?? []
 
-  const onCitationClick = (c: { id: string; page: number }) => {
+  const onCitationClick = (c: Citation) => {
     setHighlight(c.id)
     setActivePdfPage(c.page)
-    setSelectedPdfUrl(SAMPLE_PDF_URL)
+    setSelectedPdfUrl(null)
+    api
+      .get<{ url: string }>(`/api/documents/${c.documentId}/pdf-url`)
+      .then(({ data }) => setSelectedPdfUrl(data.url))
+      .catch(() => {
+        setSelectedPdfUrl(null)
+        toast.error('PDF not available for this document. If it was uploaded earlier, try re-uploading it.')
+      })
   }
 
   return (
