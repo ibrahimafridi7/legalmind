@@ -581,34 +581,69 @@ app.get('/api/chat/sessions/:sessionId/messages', async (req, res) => {
   }
 })
 
-// --- Chat streaming (Vercel AI SDK text stream protocol) ---
+// --- Chat streaming (Vercel AI SDK UI message stream / SSE) ---
+/** Extract last user message content from SDK UIMessage[] or legacy { role, content }[]. */
+function getLastUserContent(body: {
+  messages?: Array<
+    | { role: string; content?: string }
+    | { role: string; parts?: Array<{ type: string; text?: string }> }
+  >
+}): string {
+  const messages = Array.isArray(body?.messages) ? body.messages : []
+  const lastUser = messages.filter((m) => m.role === 'user').pop()
+  if (!lastUser) return ''
+  if ('content' in lastUser && typeof lastUser.content === 'string') return lastUser.content
+  if ('parts' in lastUser && Array.isArray(lastUser.parts)) {
+    return (lastUser.parts as Array<{ type: string; text?: string }>)
+      .filter((p) => p.type === 'text' && p.text != null)
+      .map((p) => p.text as string)
+      .join('')
+  }
+  return ''
+}
+
+function writeSSE(res: express.Response, data: object | string): void {
+  const payload = typeof data === 'string' ? data : JSON.stringify(data)
+  res.write(`data: ${payload}\n\n`)
+}
+
 app.post('/api/chat', async (req, res) => {
   const body = req.body as {
     sessionId?: string
-    messages?: Array<{ role: string; content: string }>
+    messages?: Array<
+      | { role: string; content: string }
+      | { role: string; parts?: Array<{ type: string; text?: string }> }
+    >
   }
-  const messages = Array.isArray(body?.messages) ? body.messages : []
-  const lastUser = messages.filter((m) => m.role === 'user').pop()
-  const q = (lastUser?.content ?? '').trim()
+  const q = getLastUserContent(body).trim()
   const sessionId = typeof body?.sessionId === 'string' ? body.sessionId.trim() : undefined
-
-  if (useDb && sessionId && lastUser?.content) {
+  const lastUserContent = getLastUserContent(body)
+  if (useDb && sessionId && lastUserContent) {
     try {
-      await insertChatMessage(sessionId, 'user', lastUser.content)
+      await insertChatMessage(sessionId, 'user', lastUserContent)
     } catch (err) {
       console.warn('[chat] save user message:', err)
     }
   }
 
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
   res.setHeader('Cache-Control', 'no-cache, no-transform')
+  res.setHeader('x-vercel-ai-ui-message-stream', 'v1')
   res.setHeader('Transfer-Encoding', 'chunked')
   res.flushHeaders?.()
 
-  pushAudit('chat.stream.start', undefined, { qLen: q.length, protocol: 'text' })
+  const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+  const textBlockId = `text_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+
+  pushAudit('chat.stream.start', undefined, { qLen: q.length, protocol: 'sse' })
 
   if (q.length === 0) {
-    res.write('Ask a legal question to start streaming.')
+    writeSSE(res, { type: 'start', messageId })
+    writeSSE(res, { type: 'text-start', id: textBlockId })
+    writeSSE(res, { type: 'text-delta', id: textBlockId, delta: 'Ask a legal question to start streaming.' })
+    writeSSE(res, { type: 'text-end', id: textBlockId })
+    writeSSE(res, { type: 'finish' })
+    writeSSE(res, '[DONE]')
     res.end()
     pushAudit('chat.stream.done')
     return
@@ -618,6 +653,7 @@ app.post('/api/chat', async (req, res) => {
     let streamedContent = ''
     let savedCitations: Array<{ id: string; documentId: string; docName: string; page: number; snippet: string }> = []
     try {
+      writeSSE(res, { type: 'start', messageId })
       const citationsPayload = (chunks: RetrievedChunk[]) => {
         const resolved = chunks.map((c, i) => {
           const resolvedName =
@@ -634,12 +670,14 @@ app.post('/api/chat', async (req, res) => {
           new Map(resolved.map((r) => [`${r.docName}-${r.page}`, r])).values()
         )
         savedCitations = uniqueSources.slice(0, 2)
-        res.write(JSON.stringify({ citations: savedCitations }) + '\n')
+        writeSSE(res, { type: 'data-citations', data: savedCitations })
       }
+      writeSSE(res, { type: 'text-start', id: textBlockId })
       await streamGroundedAnswer(q, (chunk) => {
         streamedContent += chunk
-        res.write(chunk)
+        writeSSE(res, { type: 'text-delta', id: textBlockId, delta: chunk })
       }, citationsPayload)
+      writeSSE(res, { type: 'text-end', id: textBlockId })
       if (useDb && sessionId && streamedContent) {
         try {
           await insertChatMessage(sessionId, 'assistant', streamedContent, savedCitations)
@@ -649,8 +687,11 @@ app.post('/api/chat', async (req, res) => {
       }
     } catch (err) {
       console.warn('[chat] Pinecone/OpenAI error:', err)
-      res.write('Sorry, I could not generate an answer right now. Please try again.')
+      writeSSE(res, { type: 'text-delta', id: textBlockId, delta: 'Sorry, I could not generate an answer right now. Please try again.' })
+      writeSSE(res, { type: 'text-end', id: textBlockId })
     }
+    writeSSE(res, { type: 'finish' })
+    writeSSE(res, '[DONE]')
     res.end()
     pushAudit('chat.stream.done')
     return
@@ -658,20 +699,26 @@ app.post('/api/chat', async (req, res) => {
 
   const content = `Draft answer (dev stub) for: "${q}".\n\nUpload documents and set PINECONE_API_KEY + OPENAI_API_KEY for RAG-grounded answers.`
   const tokens = content.split(/(\s+)/)
+  writeSSE(res, { type: 'start', messageId })
+  writeSSE(res, { type: 'text-start', id: textBlockId })
   let i = 0
   const interval = setInterval(() => {
     if (i >= tokens.length) {
       clearInterval(interval)
+      writeSSE(res, { type: 'text-end', id: textBlockId })
+      writeSSE(res, { type: 'finish' })
+      writeSSE(res, '[DONE]')
+      res.end()
+      pushAudit('chat.stream.done')
       if (useDb && sessionId && content) {
         insertChatMessage(sessionId, 'assistant', content).catch((err) =>
           console.warn('[chat] save assistant message:', err)
         )
       }
-      res.end()
-      pushAudit('chat.stream.done')
       return
     }
-    res.write(tokens[i++])
+    writeSSE(res, { type: 'text-delta', id: textBlockId, delta: tokens[i] })
+    i++
   }, 40)
   req.on('close', () => clearInterval(interval))
 })

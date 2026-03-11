@@ -1,12 +1,41 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
 import { API_BASE_URL } from '../lib/config'
 import { getAuthToken } from '../lib/auth'
 import { useChatMessages, useChatMutation } from '../queries/chatQueries'
 import type { ChatMessageWithCitations, Citation } from '../types/chat.types'
 
-/** Vercel AI SDK text stream protocol: POST /api/chat returns plain text chunks. */
-
 export type { ChatMessageWithCitations } from '../types/chat.types'
+
+/** Map SDK UIMessage parts to our ChatMessageWithCitations shape. */
+function uiMessageToOurMessage(msg: { id: string; role: string; parts?: Array<{ type: string; text?: string; data?: Citation[] }> }): ChatMessageWithCitations {
+  const parts = Array.isArray(msg.parts) ? msg.parts : []
+  const content = parts
+    .filter((p): p is { type: string; text: string } => p.type === 'text' && typeof p.text === 'string')
+    .map((p) => p.text)
+    .join('')
+  const citationsPart = parts.find((p) => p.type === 'data-citations' && Array.isArray(p.data))
+  const citations = citationsPart?.data as Citation[] | undefined
+  return {
+    id: msg.id,
+    role: msg.role === 'user' ? 'user' : 'assistant',
+    content,
+    ...(citations?.length ? { citations } : {})
+  }
+}
+
+/** Map our messages to UIMessage shape for useChat initial/hydration. */
+function ourMessagesToUIMessages(messages: ChatMessageWithCitations[]): Array<{ id: string; role: 'user' | 'assistant'; parts: Array<{ type: 'text'; text: string } | { type: 'data-citations'; data: Citation[] }> }> {
+  return messages.map((m) => ({
+    id: m.id,
+    role: m.role,
+    parts: [
+      { type: 'text' as const, text: m.content ?? '' },
+      ...(m.citations?.length ? [{ type: 'data-citations' as const, data: m.citations }] : [])
+    ]
+  }))
+}
 
 interface UseLegalChatResult {
   messages: ChatMessageWithCitations[]
@@ -18,125 +47,65 @@ interface UseLegalChatResult {
 }
 
 export const useLegalChat = (sessionId: string): UseLegalChatResult => {
-  const { data: messages = [] } = useChatMessages(sessionId)
-  const { setMessages } = useChatMutation(sessionId)
+  const { data: storedMessages = [] } = useChatMessages(sessionId)
+  const { setMessages: setPersistenceMessages } = useChatMutation(sessionId)
   const [input, setInput] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [isStreaming, setIsStreaming] = useState(false)
-  const abortRef = useRef<AbortController | null>(null)
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: `${API_BASE_URL}/api/chat`,
+        body: { sessionId },
+        fetch: async (input, init) => {
+          const token = await getAuthToken()
+          const headers = new Headers(init?.headers)
+          if (token) headers.set('Authorization', `Bearer ${token}`)
+          return fetch(input, { ...init, headers })
+        }
+      }),
+    [sessionId]
+  )
+
+  const {
+    messages: sdkMessages,
+    sendMessage,
+    setMessages: setSdkMessages,
+    status
+  } = useChat({
+    id: sessionId,
+    transport
+  })
+
+  const messages: ChatMessageWithCitations[] = useMemo(
+    () => sdkMessages.map(uiMessageToOurMessage),
+    [sdkMessages]
+  )
+
+  const isLoading = status === 'submitted'
+  const isStreaming = status === 'streaming'
+
+  useEffect(() => {
+    if (storedMessages.length > 0 && sdkMessages.length === 0) {
+      setSdkMessages(ourMessagesToUIMessages(storedMessages))
+    }
+  }, [storedMessages, sdkMessages.length, setSdkMessages])
+
+  useEffect(() => {
+    if (messages.length === 0) return
+    setPersistenceMessages(() => messages)
+  }, [messages, setPersistenceMessages])
 
   const handleInputChange: UseLegalChatResult['handleInputChange'] = (e) => {
     setInput(e.target.value)
   }
 
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort()
-    }
-  }, [])
-
-  const handleSubmit: UseLegalChatResult['handleSubmit'] = async (e) => {
+  const handleSubmit: UseLegalChatResult['handleSubmit'] = (e) => {
     e.preventDefault()
     if (!input.trim()) return
-    const q = input
-    const userMessage: ChatMessageWithCitations = { id: crypto.randomUUID(), role: 'user', content: q }
+    const text = input.trim()
     setInput('')
-    setIsLoading(true)
-    setIsStreaming(true)
-
-    const assistantId = crypto.randomUUID()
-    setMessages((prev) => [
-      ...prev,
-      userMessage,
-      { id: assistantId, role: 'assistant', content: '' }
-    ])
-
-    abortRef.current?.abort()
-    const ac = new AbortController()
-    abortRef.current = ac
-
-    const appendDelta = (delta: string) => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + delta } : m))
-      )
-    }
-
-    const setAssistantContent = (content: string) => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === assistantId ? { ...m, content } : m))
-      )
-    }
-
-    const setAssistantCitations = (citations: Citation[]) => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === assistantId ? { ...m, citations } : m))
-      )
-    }
-
-    const messagesForApi = [
-      ...messages.map((m) => ({ role: m.role, content: m.content })),
-      { role: 'user' as const, content: q }
-    ]
-
-    try {
-      const token = await getAuthToken()
-      const headers: HeadersInit = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-
-      const res = await fetch(`${API_BASE_URL}/api/chat`, {
-        method: 'POST',
-        signal: ac.signal,
-        headers,
-        body: JSON.stringify({ sessionId, messages: messagesForApi })
-      })
-      if (!res.ok || !res.body) throw new Error(`Chat stream failed (${res.status})`)
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      let citationsParsed = false
-
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        if (!citationsParsed && buffer.includes('\n')) {
-          const idx = buffer.indexOf('\n')
-          const line = buffer.slice(0, idx)
-          buffer = buffer.slice(idx + 1)
-          try {
-            const o = JSON.parse(line) as { citations?: Citation[] }
-            if (Array.isArray(o.citations) && o.citations.length > 0) {
-              setAssistantCitations(o.citations)
-            }
-          } catch {
-            appendDelta(line + '\n')
-          }
-          citationsParsed = true
-        }
-        if (citationsParsed && buffer.length > 0) {
-          appendDelta(buffer)
-          buffer = ''
-        }
-      }
-      if (buffer.length > 0) appendDelta(buffer)
-
-      setIsStreaming(false)
-    } catch (err) {
-      const isNetworkFailure =
-        err instanceof TypeError ||
-        (err instanceof Error && (err.message.includes('fetch') || err.message.includes('network')))
-      setAssistantContent(
-        isNetworkFailure
-          ? 'Could not reach the server. Check your connection and retry.'
-          : 'Something went wrong. Please try again.'
-      )
-    } finally {
-      setIsLoading(false)
-      setIsStreaming(false)
-    }
+    sendMessage({ text }, { body: { sessionId } })
   }
 
   return { messages, input, isLoading, isStreaming, handleInputChange, handleSubmit }
 }
-
