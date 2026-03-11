@@ -93,22 +93,35 @@ export const useLegalChat = (sessionId: string): UseLegalChatResult => {
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
-      let fullText = ''
+      let buffer = ''
+      let citationsParsed = false
 
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        fullText += chunk
-        appendDelta(chunk)
+        buffer += decoder.decode(value, { stream: true })
+        if (!citationsParsed && buffer.includes('\n')) {
+          const idx = buffer.indexOf('\n')
+          const line = buffer.slice(0, idx)
+          buffer = buffer.slice(idx + 1)
+          try {
+            const o = JSON.parse(line) as { citations?: Citation[] }
+            if (Array.isArray(o.citations) && o.citations.length > 0) {
+              setAssistantCitations(o.citations)
+            }
+          } catch {
+            appendDelta(line + '\n')
+          }
+          citationsParsed = true
+        }
+        if (citationsParsed && buffer.length > 0) {
+          appendDelta(buffer)
+          buffer = ''
+        }
       }
+      if (buffer.length > 0) appendDelta(buffer)
 
       setIsStreaming(false)
-      const citations: Citation[] = [
-        { id: 'c1', documentId: 'doc1', page: 1, snippet: 'Sample snippet from the document.' },
-        { id: 'c2', documentId: 'doc1', page: 2, snippet: 'Another relevant passage for the answer.' }
-      ]
-      setAssistantCitations(citations)
     } catch (err) {
       const isNetworkFailure =
         err instanceof TypeError ||

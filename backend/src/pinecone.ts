@@ -209,9 +209,11 @@ export async function queryPinecone(query: string): Promise<RetrievedChunk[]> {
 
 export async function streamGroundedAnswer(
   query: string,
-  onChunk: (text: string) => void
+  onChunk: (text: string) => void,
+  onCitations?: (chunks: RetrievedChunk[]) => void
 ): Promise<void> {
   const chunks = await queryPinecone(query)
+  onCitations?.(chunks)
   const context =
     chunks.length > 0
       ? chunks.map((c) => `[${c.docName}]\n${c.text}`).join('\n\n---\n\n')

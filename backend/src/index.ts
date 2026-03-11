@@ -3,12 +3,13 @@ import cors from 'cors'
 import { z } from 'zod'
 import jwksClient from 'jwks-rsa'
 import jwt from 'jsonwebtoken'
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import {
   usePinecone,
   indexDocumentFromS3,
-  streamGroundedAnswer
+  streamGroundedAnswer,
+  type RetrievedChunk
 } from './pinecone.js'
 
 type Role = 'admin' | 'partner' | 'associate' | 'paralegal' | 'guest'
@@ -368,6 +369,22 @@ app.get('/api/documents/:documentId', (req, res) => {
   res.json(doc)
 })
 
+app.get('/api/documents/:documentId/pdf-url', async (req, res) => {
+  const doc = documents.get(req.params.documentId)
+  if (!doc) return res.status(404).json({ error: 'document not found' })
+  if (!s3Client || !S3_BUCKET || !doc.s3Key) {
+    return res.status(404).json({ error: 'PDF not available (uploaded locally or no S3)' })
+  }
+  try {
+    const command = new GetObjectCommand({ Bucket: S3_BUCKET, Key: doc.s3Key })
+    const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 })
+    res.json({ url })
+  } catch (err) {
+    console.warn('[pdf-url]', err)
+    res.status(500).json({ error: 'Failed to generate PDF URL' })
+  }
+})
+
 // --- Audit logs ---
 app.get('/api/audit-logs', (req, res) => {
   const limit = Math.min(Number(req.query.limit ?? 100), 500)
@@ -445,7 +462,17 @@ app.post('/api/chat', async (req, res) => {
 
   if (usePinecone) {
     try {
-      await streamGroundedAnswer(q, (chunk) => res.write(chunk))
+      const citationsPayload = (chunks: RetrievedChunk[]) => {
+        const citations = chunks.map((c, i) => ({
+          id: `${c.documentId}_${i}`,
+          documentId: c.documentId,
+          docName: c.docName,
+          page: 1,
+          snippet: c.text.slice(0, 400)
+        }))
+        res.write(JSON.stringify({ citations }) + '\n')
+      }
+      await streamGroundedAnswer(q, (chunk) => res.write(chunk), citationsPayload)
     } catch (err) {
       console.warn('[chat] Pinecone/OpenAI error:', err)
       res.write('Sorry, I could not generate an answer right now. Please try again.')

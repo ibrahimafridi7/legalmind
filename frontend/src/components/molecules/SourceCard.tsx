@@ -15,7 +15,7 @@ export const SourceCard = ({ citation, isActive, onClick }: Props) => (
     }`}
   >
     <div className="mb-1 font-medium text-slate-100">
-      {citation.documentId} · p.{citation.page}
+      {citation.docName ?? citation.documentId} · p.{citation.page}
     </div>
     <div className="line-clamp-3 text-brand-muted">{citation.snippet}</div>
   </button>

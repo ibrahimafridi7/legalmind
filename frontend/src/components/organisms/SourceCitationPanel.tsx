@@ -2,6 +2,7 @@ import { useUIStore } from '../../store/uiStore'
 import type { Citation } from '../../types/chat.types'
 import { SourceCard } from '../molecules/SourceCard'
 import { SAMPLE_PDF_URL } from '../../lib/config'
+import api from '../../lib/api'
 
 interface Props {
   citations: Citation[]
@@ -13,7 +14,14 @@ export const SourceCitationPanel = ({ citations }: Props) => {
   const onCitationClick = (c: Citation) => {
     setHighlight(c.id)
     setActivePdfPage(c.page)
-    setSelectedPdfUrl(SAMPLE_PDF_URL)
+    api
+      .get<{ url: string }>(`/api/documents/${c.documentId}/pdf-url`)
+      .then(({ data }) => {
+        setSelectedPdfUrl(data.url)
+      })
+      .catch(() => {
+        setSelectedPdfUrl(SAMPLE_PDF_URL)
+      })
   }
 
   return (

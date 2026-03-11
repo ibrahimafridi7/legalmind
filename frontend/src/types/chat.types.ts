@@ -17,6 +17,7 @@ export interface ChatMessageWithCitations {
 export interface Citation {
   id: string
   documentId: string
+  docName?: string
   page: number
   snippet: string
 }
