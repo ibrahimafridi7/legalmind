@@ -244,27 +244,45 @@ app.get('/api/auth/me', async (req, res) => {
 })
 
 // --- Documents ---
+const MAX_PINECONE_DOCS_MERGE = 200
 app.get('/api/documents', async (req, res) => {
-  const ctx = await getAuditContext(req)
-  pushAudit('document.list', ctx.actorEmail, {}, { ip: ctx.ip, actorId: ctx.actorId })
-  const list: DocumentRecord[] = Array.from(documents.values())
-  if (usePinecone) {
-    const pineconeIds = await listPineconeDocumentIds()
-    for (const id of pineconeIds) {
-      if (documents.has(id)) continue
-      const meta = await getDocumentMetadata(id)
-      if (meta) {
-        list.push({
-          id,
-          name: meta.docName || id,
-          uploadedAt: '',
-          status: 'ready',
-          s3Key: meta.s3Key
-        })
+  try {
+    const ctx = await getAuditContext(req)
+    pushAudit('document.list', ctx.actorEmail, {}, { ip: ctx.ip, actorId: ctx.actorId })
+    const list: DocumentRecord[] = Array.from(documents.values())
+    if (usePinecone) {
+      try {
+        const pineconeIds = await listPineconeDocumentIds()
+        let merged = 0
+        for (const id of pineconeIds) {
+          if (merged >= MAX_PINECONE_DOCS_MERGE) break
+          if (documents.has(id)) continue
+          try {
+            const meta = await getDocumentMetadata(id)
+            if (meta) {
+              list.push({
+                id,
+                name: meta.docName || id,
+                uploadedAt: '',
+                status: 'ready',
+                s3Key: meta.s3Key
+              })
+              merged++
+            }
+          } catch {
+            // skip this doc, continue
+          }
+        }
+      } catch (err) {
+        console.warn('[documents] Pinecone list failed:', err instanceof Error ? err.message : err)
+        // still return in-memory list
       }
     }
+    res.json(list.sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || '')))
+  } catch (err) {
+    console.warn('[documents]', err)
+    res.status(500).json({ error: 'Failed to load documents' })
   }
-  res.json(list.sort((a, b) => (b.uploadedAt || '').localeCompare(a.uploadedAt || '')))
 })
 
 // SSE stream for document indexing status (ready/failed). Clients subscribe to avoid polling.
@@ -496,8 +514,13 @@ app.get('/api/documents/:documentId/pdf-url', async (req, res) => {
 
 // --- Audit logs ---
 app.get('/api/audit-logs', (req, res) => {
-  const limit = Math.min(Number(req.query.limit ?? 100), 500)
-  res.json(auditLogs.slice(0, limit))
+  try {
+    const limit = Math.min(Number(req.query.limit ?? 100), 500)
+    res.json(Array.isArray(auditLogs) ? auditLogs.slice(0, limit) : [])
+  } catch (err) {
+    console.warn('[audit-logs]', err)
+    res.status(500).json({ error: 'Failed to load audit logs' })
+  }
 })
 
 // --- Vector status webhook (inbound: for testing or when webhook URL points at this server) ---
