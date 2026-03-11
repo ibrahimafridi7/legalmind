@@ -56,3 +56,12 @@ To use Auth0 instead of dev-mode login:
 
 5. Restart frontend and backend. “Continue with SSO” will redirect to Auth0; after login, the backend validates the JWT and returns the user (role from custom claim `https://legalmind.app/role` or Auth0 rule, else `associate`).
 
+## RAG (Pinecone + OpenAI)
+
+For answers grounded in your uploaded PDFs:
+
+1. **S3** must be enabled so PDFs are stored (see [docs/AWS_S3_SETUP.md](./docs/AWS_S3_SETUP.md)).
+2. **Pinecone** and **OpenAI** (see [docs/PINECONE_SETUP.md](./docs/PINECONE_SETUP.md)): set `PINECONE_API_KEY`, `PINECONE_INDEX`, and `OPENAI_API_KEY` in the backend `.env`.
+
+Then: uploads to S3 are indexed (text → chunks → embeddings → Pinecone), and chat streams answers from OpenAI using retrieved chunks as context.
+

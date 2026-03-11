@@ -5,6 +5,11 @@ import jwksClient from 'jwks-rsa'
 import jwt from 'jsonwebtoken'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import {
+  usePinecone,
+  indexDocumentFromS3,
+  streamGroundedAnswer
+} from './pinecone.js'
 
 type Role = 'admin' | 'partner' | 'associate' | 'paralegal' | 'guest'
 
@@ -67,6 +72,8 @@ type DocumentRecord = {
   uploadedAt: string
   status: 'pending' | 'indexing' | 'ready' | 'failed'
   sizeBytes?: number
+  /** Set when presigning for S3; used for Pinecone indexing */
+  s3Key?: string
 }
 
 type AuditLog = {
@@ -169,6 +176,8 @@ app.post('/api/documents/presign', async (req, res) => {
 
   if (s3Client && S3_BUCKET) {
     const key = `uploads/${docId}/${body.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    record.s3Key = key
+    documents.set(docId, record)
     const command = new PutObjectCommand({
       Bucket: S3_BUCKET,
       Key: key,
@@ -201,13 +210,30 @@ app.post('/api/documents/:documentId/confirm-upload', (req, res) => {
   documents.set(documentId, doc)
   pushAudit('document.uploaded.s3', undefined, { documentId })
 
-  setTimeout(() => {
-    const current = documents.get(documentId)
-    if (!current) return
-    current.status = 'ready'
-    documents.set(documentId, current)
-    pushAudit('document.indexed', undefined, { documentId })
-  }, 2500)
+  if (usePinecone && s3Client && S3_BUCKET && doc.s3Key) {
+    indexDocumentFromS3(
+      documentId,
+      doc.name,
+      doc.s3Key,
+      s3Client,
+      S3_BUCKET,
+      (status) => {
+        const current = documents.get(documentId)
+        if (!current) return
+        current.status = status
+        documents.set(documentId, current)
+        pushAudit('document.indexed', undefined, { documentId, status })
+      }
+    )
+  } else {
+    setTimeout(() => {
+      const current = documents.get(documentId)
+      if (!current) return
+      current.status = 'ready'
+      documents.set(documentId, current)
+      pushAudit('document.indexed', undefined, { documentId })
+    }, 2500)
+  }
 
   res.status(200).json({ ok: true, status: 'indexing' })
 })
@@ -360,14 +386,28 @@ app.post('/api/chat', async (req, res) => {
 
   pushAudit('chat.stream.start', undefined, { qLen: q.length, protocol: 'text' })
 
-  const content =
-    q.length === 0
-      ? 'Ask a legal question to start streaming. (This is a dev stub.)'
-      : `Draft answer (dev stub) for: "${q}".\n\nThis will later be grounded using Pinecone + your uploaded documents.\n\nKey point: Vercel AI SDK text stream protocol.`
+  if (q.length === 0) {
+    res.write('Ask a legal question to start streaming.')
+    res.end()
+    pushAudit('chat.stream.done')
+    return
+  }
 
+  if (usePinecone) {
+    try {
+      await streamGroundedAnswer(q, (chunk) => res.write(chunk))
+    } catch (err) {
+      console.warn('[chat] Pinecone/OpenAI error:', err)
+      res.write('Sorry, I could not generate an answer right now. Please try again.')
+    }
+    res.end()
+    pushAudit('chat.stream.done')
+    return
+  }
+
+  const content = `Draft answer (dev stub) for: "${q}".\n\nUpload documents and set PINECONE_API_KEY + OPENAI_API_KEY for RAG-grounded answers.`
   const tokens = content.split(/(\s+)/)
   let i = 0
-
   const interval = setInterval(() => {
     if (i >= tokens.length) {
       clearInterval(interval)
@@ -377,10 +417,7 @@ app.post('/api/chat', async (req, res) => {
     }
     res.write(tokens[i++])
   }, 40)
-
-  req.on('close', () => {
-    clearInterval(interval)
-  })
+  req.on('close', () => clearInterval(interval))
 })
 
 const PORT = Number(process.env.PORT ?? 8787)
