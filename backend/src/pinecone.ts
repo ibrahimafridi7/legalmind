@@ -270,7 +270,7 @@ export async function listPineconeDocumentIds(): Promise<string[]> {
   let paginationToken: string | undefined
   do {
     const result = await ns.listPaginated({
-      limit: 500,
+      limit: 99,
       ...(paginationToken && { paginationToken })
     })
     const vectors = (result as { vectors?: Array<{ id?: string }> }).vectors ?? []
