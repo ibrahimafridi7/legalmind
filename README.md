@@ -85,6 +85,88 @@ flowchart TB
 3. **Chat:** Frontend sends messages to `POST /api/chat` with token → backend retrieves chunks from Pinecone, calls OpenAI/OpenRouter, streams SSE (Vercel AI SDK format) → optional: save messages to Postgres.
 4. **Citation/PDF:** User clicks citation → frontend calls `GET /api/documents/:id/pdf-url` → backend returns signed S3 URL → PDF viewer opens at page.
 
+## System design — Humara system kaise kaam karta hai
+
+High-level flow: user browser se Vercel par frontend chalta hai, Auth0 se login; frontend backend (e.g. Render) ko call karta hai. Backend PDFs ke liye S3 use karta hai, RAG ke liye Pinecone + OpenAI/OpenRouter, chat history ke liye Postgres (e.g. Vercel Postgres).
+
+```mermaid
+flowchart TB
+  subgraph User["👤 User"]
+    Browser[Browser]
+  end
+
+  subgraph Frontend["Frontend (Vercel)"]
+    React[React + Vite]
+    TanStack[TanStack Query]
+    Zustand[Zustand]
+    React --> TanStack
+    React --> Zustand
+  end
+
+  subgraph Auth["Auth0"]
+    Login[SSO / Login]
+    JWT[JWT Token]
+    Login --> JWT
+  end
+
+  subgraph Backend["Backend (e.g. Render)"]
+    Express[Express API]
+    Presign[Presign / Upload]
+    Chat[Chat SSE]
+    Docs[Documents / Audit]
+    Express --> Presign
+    Express --> Chat
+    Express --> Docs
+  end
+
+  subgraph Storage["Storage & DB"]
+    S3[("AWS S3\n(PDF files)")]
+    PG[("PostgreSQL\n(Vercel Postgres / Chat history)")]
+  end
+
+  subgraph RAG["RAG Pipeline"]
+    Pinecone[("Pinecone\n(Vector index)")]
+    Embed[OpenAI Embedding\nor OpenRouter Embed]
+    LLM[OpenAI Chat\nor OpenRouter]
+    Pinecone --> Embed
+    Embed --> Pinecone
+    Pinecone --> LLM
+    LLM --> Chat
+  end
+
+  Browser -->|HTTPS| React
+  Browser -->|Login| Auth
+  Auth -->|Bearer token| React
+  React -->|API calls + token| Express
+  Express -->|validate JWT| Auth
+  Express -->|presign, confirm, signed URL| S3
+  Express -->|read/write chat messages| PG
+  Express -->|query vectors + stream answer| RAG
+  Backend -->|index: PDF → chunks → embed| Embed
+  Backend -->|upsert vectors| Pinecone
+  Backend -->|signed URL for viewer| S3
+```
+
+**Component roles**
+
+| Component | Role |
+|-----------|------|
+| **Vercel** | Hosts React frontend; env `VITE_API_BASE_URL` points to backend. |
+| **Auth0** | SSO, JWT issue, silent refresh; backend validates token and reads role. |
+| **Render** (or other host) | Runs Express backend; env for S3, Pinecone, OpenAI/OpenRouter, DB. |
+| **Vercel Postgres** (or any Postgres) | `DATABASE_URL` — chat message history; optional. |
+| **Pinecone** | Vector index; document chunks + embeddings; RAG retrieval. |
+| **AWS S3** | PDF storage; presigned upload + signed read for PDF viewer. |
+| **OpenAI** | Embeddings (e.g. `text-embedding-3-small`) and/or chat (e.g. `gpt-4o-mini`). |
+| **OpenRouter** | Optional: chat and/or embeddings (free models); set `OPENROUTER_API_KEY` + model env. |
+
+**Request flow (short)**
+
+1. **Login:** Browser → Auth0 → JWT → frontend stores token, sends `Authorization: Bearer …` to backend.
+2. **Upload:** Frontend asks backend for presign → backend returns S3 presigned URL (or chunk URL) → frontend uploads file → backend confirms and triggers indexing (PDF → chunks → embeddings → Pinecone).
+3. **Chat:** Frontend sends messages to `POST /api/chat` with token → backend retrieves chunks from Pinecone, calls OpenAI/OpenRouter, streams SSE (Vercel AI SDK format) → optional: save messages to Postgres.
+4. **Citation/PDF:** User clicks citation → frontend calls `GET /api/documents/:id/pdf-url` → backend returns signed S3 URL → PDF viewer opens at page.
+
 ## Structure
 
 - **frontend/** — React (TanStack Query, Zustand), Tailwind, Shadcn-style UI, SSE chat, chunked uploads, RBAC, ErrorBoundary, toasts.
