@@ -4,26 +4,21 @@ import { Sidebar } from '../components/organisms/Sidebar'
 import { useAuditLogs } from '../queries/auditQueries'
 import type { AuditLogDto } from '../queries/auditQueries'
 
-const ROW_HEIGHT = 52
+const ROW_HEIGHT = 48
 const TABLE_HEIGHT = 420
+const GRID_COLS = '180px 1fr 140px 200px'
 
 function AuditRow({ index, style, data }: ListChildComponentProps<AuditLogDto[]>) {
   const log = data[index]!
   return (
     <div
-      style={style}
-      className="flex items-center border-b border-slate-800 bg-brand-surface/50 text-sm"
+      style={{ ...style, display: 'grid', gridTemplateColumns: GRID_COLS, alignItems: 'center', gap: 0 }}
+      className="border-b border-slate-800 bg-brand-surface/50 text-sm"
     >
-      <div className="w-[160px] shrink-0 px-4 py-2 text-slate-300">
-        {new Date(log.at).toLocaleString()}
-      </div>
-      <div className="min-w-0 flex-1 truncate px-4 py-2 text-slate-300" title={log.actorEmail}>
-        {log.actorEmail}
-      </div>
-      <div className="w-[140px] shrink-0 truncate px-4 py-2 text-slate-300" title={log.action}>
-        {log.action}
-      </div>
-      <div className="min-w-0 max-w-[240px] truncate px-4 py-2 text-slate-400" title={log.metadata ? JSON.stringify(log.metadata) : undefined}>
+      <div className="truncate px-4 py-2 text-slate-300">{new Date(log.at).toLocaleString()}</div>
+      <div className="min-w-0 truncate px-4 py-2 text-slate-300" title={log.actorEmail}>{log.actorEmail}</div>
+      <div className="min-w-0 truncate px-4 py-2 text-slate-300" title={log.action}>{log.action}</div>
+      <div className="min-w-0 truncate px-4 py-2 text-slate-400" title={log.metadata ? JSON.stringify(log.metadata) : undefined}>
         {log.metadata ? JSON.stringify(log.metadata) : '—'}
       </div>
     </div>
@@ -42,11 +37,14 @@ export const AuditLogsPage = () => {
         {isLoading && <p className="text-muted text-sm">Loading…</p>}
         {logs && logs.length > 0 && (
           <div className="mt-4 overflow-hidden rounded-lg border border-slate-700">
-            <div className="flex border-b border-slate-700 bg-slate-800/50 text-left text-sm font-medium text-slate-200">
-              <div className="w-[160px] shrink-0 px-4 py-2">Time</div>
-              <div className="min-w-0 flex-1 px-4 py-2">Actor</div>
-              <div className="w-[140px] shrink-0 px-4 py-2">Action</div>
-              <div className="min-w-0 max-w-[240px] px-4 py-2">Details</div>
+            <div
+              className="grid border-b border-slate-700 bg-slate-800/50 px-4 py-2 text-left text-sm font-medium text-slate-200"
+              style={{ gridTemplateColumns: GRID_COLS }}
+            >
+              <div>Time</div>
+              <div className="min-w-0 truncate">Actor</div>
+              <div className="min-w-0 truncate">Action</div>
+              <div className="min-w-0 truncate">Details</div>
             </div>
             <List
               height={Math.min(TABLE_HEIGHT, logs.length * ROW_HEIGHT)}

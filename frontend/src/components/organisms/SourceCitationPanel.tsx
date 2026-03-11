@@ -1,7 +1,8 @@
 import { useUIStore } from '../../store/uiStore'
 import type { Citation } from '../../types/chat.types'
 import { SourceCard } from '../molecules/SourceCard'
-import { SAMPLE_PDF_URL } from '../../lib/config'
+import { useState } from 'react'
+import { toast } from 'sonner'
 import api from '../../lib/api'
 
 interface Props {
@@ -10,18 +11,23 @@ interface Props {
 
 export const SourceCitationPanel = ({ citations }: Props) => {
   const { highlightedCitation, setHighlight, setActivePdfPage, setSelectedPdfUrl } = useUIStore()
+  const [loadingPdf, setLoadingPdf] = useState(false)
 
   const onCitationClick = (c: Citation) => {
     setHighlight(c.id)
     setActivePdfPage(c.page)
+    setLoadingPdf(true)
+    setSelectedPdfUrl(null)
     api
       .get<{ url: string }>(`/api/documents/${c.documentId}/pdf-url`)
       .then(({ data }) => {
         setSelectedPdfUrl(data.url)
       })
       .catch(() => {
-        setSelectedPdfUrl(SAMPLE_PDF_URL)
+        setSelectedPdfUrl(null)
+        toast.error('PDF not available for this document (may be uploaded locally).')
       })
+      .finally(() => setLoadingPdf(false))
   }
 
   return (
