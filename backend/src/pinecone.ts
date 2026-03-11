@@ -80,9 +80,21 @@ async function embedOpenRouter(texts: string[]): Promise<number[][]> {
     },
     body: JSON.stringify({ model: OPENROUTER_EMBED_MODEL, input: texts })
   })
-  if (!res.ok) throw new Error(`OpenRouter embed: ${res.status}`)
-  const data = (await res.json()) as { data?: Array<{ embedding: number[] }> }
-  return (data.data ?? []).map((d) => d.embedding)
+  const body = (await res.json()) as {
+    data?: Array<{ embedding?: number[] }>
+    error?: { message?: string }
+    message?: string
+  }
+  if (!res.ok) {
+    const msg = (body?.error?.message ?? (typeof body?.message === 'string' ? body.message : undefined)) ?? res.statusText
+    throw new Error(`OpenRouter embed: ${res.status} ${msg}`.trim())
+  }
+  const list = body.data ?? []
+  return list.map((d) => {
+    const emb = d.embedding
+    if (!Array.isArray(emb)) throw new Error(`OpenRouter embed: unexpected shape for model ${OPENROUTER_EMBED_MODEL}`)
+    return emb
+  })
 }
 
 async function embed(texts: string[]): Promise<number[][]> {

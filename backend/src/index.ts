@@ -374,6 +374,19 @@ app.get('/api/audit-logs', (req, res) => {
   res.json(auditLogs.slice(0, limit))
 })
 
+// --- Vector status webhook (inbound: for testing or when webhook URL points at this server) ---
+app.get('/webhooks/vector-status', (_req, res) => {
+  res.json({
+    ok: true,
+    message: 'Vector status webhook endpoint. Backend POSTs here when a document becomes ready/failed (body: documentId, status, at).'
+  })
+})
+app.post('/webhooks/vector-status', express.json(), (req, res) => {
+  const { documentId, status, at } = req.body ?? {}
+  console.log('[webhook] vector-status received:', { documentId, status, at })
+  res.status(200).json({ ok: true })
+})
+
 // --- Chat streaming (SSE) - legacy GET for custom client ---
 app.get('/api/chat/stream', (req, res) => {
   const q = String(req.query.q ?? '').trim()

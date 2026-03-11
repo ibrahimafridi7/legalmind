@@ -97,16 +97,20 @@ body {
   color: #94a3b8;
 }
 
-/* Chat */
+/* Chat: messages on top (scroll), input fixed at bottom */
 .chat-page {
   display: flex;
+  height: 100vh;
   min-height: 100vh;
+  overflow: hidden;
 }
 
 .chat-main {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .chat-messages {

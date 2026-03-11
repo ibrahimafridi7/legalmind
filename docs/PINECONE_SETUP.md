@@ -130,31 +130,32 @@ Agar aap **OpenAI pe billing nahi karna chahte**, to **Ollama** use karke local 
 | `qwen/qwen3-next-80b-a3b-instruct:free` | 262K | Good for RAG, tool use. |
 | `google/gemma-3-27b-it:free` | 131K | Vision + text. |
 
-**Embeddings (1536 dim – free dedicated nahi, paid/credits):**
+**Embeddings:**
 
-| Model ID | Dimension | Notes |
-|----------|-----------|--------|
-| `openai/text-embedding-3-small` | 1536 | Default; same index as OpenAI. |
-| `openai/text-embedding-3-large` | 3072 | Alag index chahiye (3072 dim). |
+| Model ID | Dimension | Free? | Notes |
+|----------|-----------|-------|--------|
+| **`nvidia/llama-nemotron-embed-vl-1b-v2:free`** | **2048** | **Yes** | OpenRouter free – **Pinecone index 2048 dim** banao. |
+| `openai/text-embedding-3-small` | 1536 | No (402) | Paid/credits; index 1536. |
+| `openai/text-embedding-3-large` | 3072 | No | Alag index 3072 dim. |
 
 Full list: [OpenRouter Models – Embeddings](https://openrouter.ai/models?output_modalities=embeddings).
 
 ### Steps
 
 1. **OpenRouter account:** [openrouter.ai](https://openrouter.ai) → sign up → **Keys** se API key banao (free tier for chat).
-2. **Pinecone index** dimension **1536** (e.g. name `legalmind`).
+2. **Pinecone index** – dimension **embed model ke hisaab se** (e.g. **2048** agar free Nemotron use kar rahe ho, warna 1536).
 3. **Backend `.env`** – OpenAI *na* daalein, sirf ye add karein:
    ```env
    PINECONE_API_KEY=...
    PINECONE_INDEX=legalmind
    OPENROUTER_API_KEY=sk-or-v1-...
    OPENROUTER_CHAT_MODEL=openrouter/free
-   OPENROUTER_EMBED_MODEL=openai/text-embedding-3-small
+   OPENROUTER_EMBED_MODEL=nvidia/llama-nemotron-embed-vl-1b-v2:free
    ```
-   Chat ke liye upar wale table se koi bhi free chat model ID daal sakte ho (`OPENROUTER_CHAT_MODEL`). Embed ke liye 1536-dim model use karein.
+   **Free embeddings** ke liye `OPENROUTER_EMBED_MODEL=nvidia/llama-nemotron-embed-vl-1b-v2:free` use karein aur Pinecone index **2048 dimension** ka banao. Chat ke liye upar wale table se koi bhi free chat model (`OPENROUTER_CHAT_MODEL`).
 4. Backend restart karein.
 
-**Summary:** OpenRouter API key + free chat model = free chat. Embeddings ke liye OpenRouter pe supported embed model (e.g. `openai/text-embedding-3-small`) set karein; dedicated free embed option OpenRouter pe abhi nahi hai.
+**Summary:** OpenRouter pe **chat** free; **embeddings** ke liye **free option:** `nvidia/llama-nemotron-embed-vl-1b-v2:free` (Pinecone index **2048** dim). Paid embed ke liye `openai/text-embedding-3-small` (1536) – 402 aayega unless credits add karein.
 
 ---
 
@@ -171,10 +172,12 @@ Agar audit log mein **`document.indexed`** **`"status":"failed"`** dikhe, toh ab
 | **pdf-parse** fails / no text | File valid PDF nahi ya corrupt; try another PDF. |
 | **OpenAI embed** – 401/429 | `OPENAI_API_KEY` valid ho, billing on ho. |
 | **Ollama embed** – connection refused / 404 | `OLLAMA_BASE_URL` sahi ho (e.g. `http://localhost:11434`), `nomic-embed-text` (ya set model) run ho. Index dimension **768** hona chahiye. |
-| **OpenRouter embed** – 401/402/429 | `OPENROUTER_API_KEY` valid; embed model (e.g. `openai/text-embedding-3-small`) OpenRouter pe available ho. Index dimension **1536**. |
-| **Pinecone** – index not found / dimension mismatch | Pinecone dashboard se index name (`PINECONE_INDEX`) aur dimension check karein: OpenAI/OpenRouter 1536, Ollama 768. |
+| **OpenRouter embed: 402** | **Payment Required** – OpenRouter pe embeddings free nahi; credits add karein ya neeche wale free options use karein. |
+| **OpenRouter embed** – 401/429 | API key valid; rate limit. Embed model OpenRouter pe available ho. Index dimension **1536**. |
+| **Pinecone** – index not found / dimension mismatch | Index dimension embed model se match: Nemotron free **2048**, OpenAI/OpenRouter paid embed **1536**, Ollama **768**. |
+| **Nemotron use kar rahe ho phir bhi failed?** | Pinecone index **2048 dimension** ka hona zaroori hai (naya index banao agar purana 1536 hai). `.env` mein `OPENROUTER_EMBED_MODEL=nvidia/llama-nemotron-embed-vl-1b-v2:free` exact set karein. Backend restart. |
 
-Audit log ki `document.indexed` entry mein **`error`** dekh kar exact reason fix karein.
+Audit log ki `document.indexed` entry mein **`error`** dekh kar exact reason fix karein. Ab error message mein OpenRouter ka detail bhi aata hai (e.g. 402 reason).
 
 ---
 

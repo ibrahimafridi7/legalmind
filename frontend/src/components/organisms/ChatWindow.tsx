@@ -63,11 +63,11 @@ export const ChatWindow = ({
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
       <div
         ref={containerRef}
         className="flex-1 border-b border-slate-800"
-        style={{ minHeight: 0, flex: '1 1 0' }}
+        style={{ minHeight: 0, flex: '1 1 0', overflow: 'hidden' }}
       >
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center p-4 text-sm text-brand-muted">
@@ -96,7 +96,7 @@ export const ChatWindow = ({
         {isStreaming ? 'AI is typing' : ''}
       </div>
       <form
-        style={{ display: 'flex', gap: '8px', padding: '12px' }}
+        style={{ display: 'flex', gap: '8px', padding: '12px', flexShrink: 0 }}
         onSubmit={(e) => {
           e.preventDefault()
           handleSubmit(e)

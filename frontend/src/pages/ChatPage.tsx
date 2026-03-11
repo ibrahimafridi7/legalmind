@@ -20,7 +20,7 @@ export const ChatPage = () => {
     <div className="chat-page">
       <Sidebar />
       <main className="chat-main">
-        <section style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <section style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <ChatWindow
             messages={chat.messages}
             input={chat.input}
