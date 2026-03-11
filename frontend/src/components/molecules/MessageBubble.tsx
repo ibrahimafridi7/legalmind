@@ -1,15 +1,25 @@
-import type { ChatMessage, Citation } from '../../types/chat.types'
+import type { Citation } from '../../types/chat.types'
 import { useUIStore } from '../../store/uiStore'
 import api from '../../lib/api'
 import { toast } from 'sonner'
 
-interface Props {
-  message: ChatMessage
-  /** When true, show "AI is typing..." inside this assistant bubble (streaming, no content yet). */
-  isStreamingEmpty?: boolean
+/** Minimal message shape for display (ChatMessage or ChatMessageWithCitations). */
+interface MessageLike {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  citations?: Citation[]
 }
 
-export const MessageBubble = ({ message, isStreamingEmpty }: Props) => {
+interface Props {
+  message: MessageLike
+  /** When true, show "AI is typing..." inside this assistant bubble (streaming, no content yet). */
+  isStreamingEmpty?: boolean
+  /** When true, show a cursor at the end of the content (streaming, content present). */
+  isStreaming?: boolean
+}
+
+export const MessageBubble = ({ message, isStreamingEmpty, isStreaming }: Props) => {
   const isUser = message.role === 'user'
   const { setHighlight, setActivePdfPage, setSelectedPdfUrl } = useUIStore()
   const citations = message.citations ?? []
@@ -33,7 +43,12 @@ export const MessageBubble = ({ message, isStreamingEmpty }: Props) => {
         {isStreamingEmpty ? (
           <span className="text-brand-muted text-sm">AI is typing…</span>
         ) : (
-          <div className={!isUser ? 'whitespace-pre-wrap break-words' : ''}>{message.content}</div>
+          <div className={!isUser ? 'whitespace-pre-wrap break-words' : ''}>
+            {message.content}
+            {!isUser && isStreaming && (message.content?.length ?? 0) > 0 && (
+              <span className="chat-cursor inline-block h-4 w-0.5 shrink-0 animate-pulse bg-current align-middle" style={{ marginLeft: 2 }} aria-hidden />
+            )}
+          </div>
         )}
         {!isUser && !isStreamingEmpty && citations.length > 0 && (
           <div className="mt-3 border-t border-slate-700/50 pt-2">

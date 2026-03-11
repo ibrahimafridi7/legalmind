@@ -1,29 +1,8 @@
-import { useRef, useCallback, useState, useEffect, useLayoutEffect } from 'react'
-import { VariableSizeList as List } from 'react-window'
-import type { ListChildComponentProps } from 'react-window'
+import { useRef, useEffect } from 'react'
 import type { ChatMessageWithCitations } from '../../hooks/useChat'
 import { MessageBubble } from '../molecules/MessageBubble'
 import { Button } from '../atoms/Button'
 import { Spinner } from '../atoms/Spinner'
-
-const ROW_MIN_HEIGHT = 56
-const ROW_GAP = 12
-const ROW_HEIGHT_ESTIMATE_PER_CHAR = 0.8
-const LIST_OVERSCAN = 5
-
-function useListHeight(containerRef: React.RefObject<HTMLDivElement | null>) {
-  const [height, setHeight] = useState(400)
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const update = () => setHeight(el.getBoundingClientRect().height)
-    update()
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [containerRef])
-  return height
-}
 
 interface ChatWindowProps {
   messages: ChatMessageWithCitations[]
@@ -34,11 +13,6 @@ interface ChatWindowProps {
   isStreaming: boolean
 }
 
-function estimateRowHeight(message: ChatMessageWithCitations): number {
-  const contentLen = (message.content?.length ?? 0) + (message.citations?.length ?? 0) * 30
-  return ROW_GAP + Math.max(ROW_MIN_HEIGHT, ROW_MIN_HEIGHT + contentLen * ROW_HEIGHT_ESTIMATE_PER_CHAR)
-}
-
 export const ChatWindow = ({
   messages,
   input,
@@ -47,73 +21,65 @@ export const ChatWindow = ({
   isLoading,
   isStreaming
 }: ChatWindowProps) => {
-  const listRef = useRef<List>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const listHeight = useListHeight(containerRef)
+  const bottomSentinelRef = useRef<HTMLDivElement>(null)
+  const prevMessageCountRef = useRef(0)
+  const hasInitialScrollRef = useRef(false)
 
-  const lastMessageContentLength = messages.length > 0 ? (messages[messages.length - 1]?.content?.length ?? 0) : 0
-
-  // Keep latest message in view: when new message added or content streaming, stick to bottom
-  const scrollToBottom = useCallback(() => {
-    if (messages.length === 0 || !listRef.current) return
-    const list = listRef.current
-    list.resetAfterIndex(0)
-    list.scrollToItem(messages.length - 1, 'end')
+  // Scroll to bottom on first mount when there are messages (e.g. restored session)
+  useEffect(() => {
+    if (messages.length > 0 && !hasInitialScrollRef.current) {
+      hasInitialScrollRef.current = true
+      prevMessageCountRef.current = messages.length
+      bottomSentinelRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
+    }
   }, [messages.length])
 
-  useLayoutEffect(() => {
-    scrollToBottom()
-  }, [scrollToBottom, lastMessageContentLength, isStreaming])
-
+  // Auto-scroll to bottom only when a new message is added (not on every streaming token)
   useEffect(() => {
-    const t = setTimeout(scrollToBottom, 80)
-    return () => clearTimeout(t)
-  }, [scrollToBottom, lastMessageContentLength, isStreaming])
-
-  const getItemSize = useCallback(
-    (index: number) => estimateRowHeight(messages[index]),
-    [messages]
-  )
+    const count = messages.length
+    if (count > prevMessageCountRef.current) {
+      prevMessageCountRef.current = count
+      bottomSentinelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
+  }, [messages.length])
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <div
-        ref={containerRef}
-        className="min-h-0 flex-1 border-b border-slate-800 overflow-hidden"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden border-b border-slate-800 scrollbar-thin"
+        role="log"
+        aria-label="Chat messages"
       >
         {messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center p-4 text-sm text-brand-muted">
+          <div className="flex h-full min-h-[200px] items-center justify-center p-4 text-sm text-brand-muted">
             Ask a question about your matter, contract, or regulation.
           </div>
         ) : (
-          <List
-            ref={listRef}
-            height={listHeight}
-            width="100%"
-            itemCount={messages.length}
-            itemSize={getItemSize}
-            overscanCount={LIST_OVERSCAN}
-            style={{ overflowX: 'hidden' }}
-            className="scrollbar-thin"
-          >
-            {({ index, style }: ListChildComponentProps) => {
-              const isLast = index === messages.length - 1
-              const lastMsg = messages[index]
+          <div className="flex flex-col gap-3 p-3 pb-4 sm:p-4">
+            {messages.map((msg) => {
+              const isLast = msg.id === messages[messages.length - 1]?.id
               const isStreamingEmpty =
                 isStreaming &&
                 isLast &&
-                lastMsg?.role === 'assistant' &&
-                (lastMsg?.content?.length ?? 0) === 0
+                msg.role === 'assistant' &&
+                (msg.content?.length ?? 0) === 0
               return (
-                <div style={{ ...style, padding: '8px 12px 12px', minHeight: style.height as number }}>
-                  <MessageBubble message={lastMsg as any} isStreamingEmpty={isStreamingEmpty} />
+                <div key={msg.id} style={{ minHeight: 0 }}>
+                  <MessageBubble
+                    message={msg}
+                    isStreamingEmpty={isStreamingEmpty}
+                    isStreaming={isLast && isStreaming}
+                  />
                 </div>
               )
-            }}
-          </List>
+            })}
+            <div ref={bottomSentinelRef} className="h-0 shrink-0" aria-hidden />
+          </div>
         )}
       </div>
-      <div role="status" aria-live="polite" aria-atomic="true" className="min-h-[0.5rem]" />
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {isStreaming ? 'AI is responding' : ''}
+      </div>
       <form
         className="flex shrink-0 flex-wrap gap-2 p-3 sm:p-4"
         onSubmit={(e) => {
@@ -142,4 +108,3 @@ export const ChatWindow = ({
     </div>
   )
 }
-
