@@ -17,9 +17,9 @@ export const SourceCitationPanel = ({ citations }: Props) => {
   }
 
   return (
-    <section className="h-full border-l border-slate-800 bg-brand-dark/80 p-3">
+    <section className="shrink-0 border-b border-slate-800 bg-brand-dark/80 p-3">
       <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-brand-muted">Sources</h2>
-      <div className="space-y-2 overflow-y-auto text-xs">
+      <div className="max-h-[220px] space-y-2 overflow-y-auto text-xs">
         {citations.map((c) => (
           <SourceCard
             key={c.id}

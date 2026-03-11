@@ -16,7 +16,7 @@ export const PDFViewerPanel = () => {
   const initialPage = Math.max(0, activePdfPage - 1)
 
   return (
-    <div className="h-full min-h-[300px] overflow-auto rounded border border-slate-700 bg-slate-900">
+    <div className="h-full min-h-[260px] overflow-auto rounded border border-slate-700 bg-slate-900 flex-1">
       <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js">
         <Viewer
           key={`${selectedPdfUrl}-${initialPage}`}

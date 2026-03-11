@@ -20,7 +20,11 @@ export const ChatPage = () => {
     <div className="chat-page">
       <Sidebar />
       <main className="chat-main">
-        <section style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Left: Chat */}
+        <section
+          className="chat-split-left"
+          style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        >
           <ChatWindow
             messages={chat.messages}
             input={chat.input}
@@ -30,15 +34,13 @@ export const ChatPage = () => {
             isStreaming={chat.isStreaming}
           />
         </section>
-        <section
-          className="flex w-[400px] shrink-0 flex-col gap-3 border-l border-slate-800 p-3"
-          style={{ maxHeight: '100%' }}
-        >
-          <div className="min-h-0 flex-1 overflow-hidden">
+        {/* Right: Sources + PDF (split-screen panel) */}
+        <section className="chat-split-right">
+          <div className="chat-split-right-inner">
             <SourceCitationPanel citations={citations} />
-          </div>
-          <div className="h-[320px] min-h-0 shrink-0 overflow-hidden">
-            <PDFViewerPanel />
+            <div className="chat-pdf-area">
+              <PDFViewerPanel />
+            </div>
           </div>
         </section>
       </main>
