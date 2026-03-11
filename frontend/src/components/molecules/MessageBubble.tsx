@@ -30,7 +30,7 @@ export const MessageBubble = ({ message }: Props) => {
                 onClick={() => onCitationClick(c)}
                 className="rounded bg-slate-700/80 px-2 py-1 text-xs text-brand-muted hover:bg-slate-600 hover:text-slate-200"
               >
-                {c.documentId} · p.{c.page}
+                {c.docName ?? c.documentId} · p.{c.page}
               </button>
             ))}
           </div>

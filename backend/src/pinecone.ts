@@ -184,6 +184,7 @@ export async function indexDocumentFromS3(
           metadata: {
             documentId,
             docName: docName.slice(0, 500),
+            s3Key: s3Key.slice(0, 1024),
             chunkIndex: i,
             pageNumber: c.pageNumber,
             paragraphIndex: c.paragraphIndex,
@@ -236,6 +237,7 @@ export async function queryPinecone(query: string): Promise<RetrievedChunk[]> {
       text?: unknown
       documentId?: unknown
       docName?: unknown
+      s3Key?: unknown
       pageNumber?: unknown
       paragraphIndex?: unknown
       createdAt?: unknown
@@ -257,6 +259,31 @@ export async function queryPinecone(query: string): Promise<RetrievedChunk[]> {
         createdAt: typeof meta.createdAt === 'string' ? meta.createdAt : undefined
       }
     })
+}
+
+/** Fetch document metadata from Pinecone (docName, s3Key) for pdf-url when not in app memory. */
+export async function getDocumentMetadata(
+  documentId: string
+): Promise<{ docName: string; s3Key?: string } | null> {
+  if (!pinecone || (!openai && !useOllama && !useOpenRouter)) return null
+  const [embedding] = await embed([''])
+  if (!embedding?.length) return null
+  const index = pinecone.index(PINECONE_INDEX_NAME)
+  const ns = index.namespace(NAMESPACE)
+  const result = await ns.query({
+    vector: embedding,
+    topK: 1,
+    includeMetadata: true,
+    filter: { documentId: { $eq: documentId } }
+  })
+  const match = result.matches?.[0] as
+    | { metadata?: { docName?: unknown; s3Key?: unknown } }
+    | undefined
+  const meta = match?.metadata
+  if (!meta) return null
+  const docName = typeof meta.docName === 'string' ? meta.docName : ''
+  const s3Key = typeof meta.s3Key === 'string' && meta.s3Key ? meta.s3Key : undefined
+  return { docName, s3Key }
 }
 
 export async function streamGroundedAnswer(

@@ -9,6 +9,7 @@ import {
   usePinecone,
   indexDocumentFromS3,
   streamGroundedAnswer,
+  getDocumentMetadata,
   type RetrievedChunk
 } from './pinecone.js'
 
@@ -423,15 +424,28 @@ app.get('/api/documents/:documentId', async (req, res) => {
 
 app.get('/api/documents/:documentId/pdf-url', async (req, res) => {
   const { documentId } = req.params
-  const doc = documents.get(documentId)
+  let doc = documents.get(documentId)
+  if (!doc && usePinecone) {
+    const meta = await getDocumentMetadata(documentId)
+    if (meta) {
+      doc = {
+        id: documentId,
+        name: meta.docName || documentId,
+        uploadedAt: '',
+        status: 'ready',
+        s3Key: meta.s3Key
+      }
+    }
+  }
   if (!doc) return res.status(404).json({ error: 'document not found' })
-  if (!s3Client || !S3_BUCKET || !doc.s3Key) {
+  const s3Key = doc.s3Key
+  if (!s3Client || !S3_BUCKET || !s3Key) {
     return res.status(404).json({ error: 'PDF not available (uploaded locally or no S3)' })
   }
   const ctx = await getAuditContext(req)
   pushAudit('document.pdf_url', ctx.actorEmail, { documentId, docName: doc.name }, { ip: ctx.ip, actorId: ctx.actorId })
   try {
-    const command = new GetObjectCommand({ Bucket: S3_BUCKET, Key: doc.s3Key })
+    const command = new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3Key })
     const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 })
     res.json({ url })
   } catch (err) {
