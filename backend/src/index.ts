@@ -81,11 +81,16 @@ type AuditLog = {
   id: string
   at: string
   actorEmail: string
+  /** Auth subject id (e.g. Auth0 sub) for compliance */
+  actorId?: string
   action: string
   metadata?: Record<string, unknown>
+  /** Client IP for compliance (who accessed from where) */
+  ip?: string
 }
 
 const app = express()
+app.set('trust proxy', 1)
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json({ limit: '2mb' }))
 
@@ -136,9 +141,49 @@ function id(prefix: string) {
   return `${prefix}_${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`
 }
 
-function pushAudit(action: string, actorEmail = 'dev@legalmind.local', metadata?: Record<string, unknown>) {
-  auditLogs.unshift({ id: id('audit'), at: new Date().toISOString(), actorEmail, action, metadata })
+function pushAudit(
+  action: string,
+  actorEmail = 'dev@legalmind.local',
+  metadata?: Record<string, unknown>,
+  opts?: { ip?: string; actorId?: string }
+) {
+  const entry: AuditLog = {
+    id: id('audit'),
+    at: new Date().toISOString(),
+    actorEmail,
+    action,
+    metadata
+  }
+  if (opts?.ip) entry.ip = opts.ip
+  if (opts?.actorId) entry.actorId = opts.actorId
+  auditLogs.unshift(entry)
   if (auditLogs.length > 5000) auditLogs.length = 5000
+}
+
+function getClientIp(req: express.Request): string {
+  const forwarded = req.headers['x-forwarded-for']
+  if (typeof forwarded === 'string') return forwarded.split(',')[0]!.trim()
+  if (req.socket?.remoteAddress) return req.socket.remoteAddress
+  return 'unknown'
+}
+
+async function getAuditContext(req: express.Request): Promise<{ actorEmail: string; actorId?: string; ip: string }> {
+  const ip = getClientIp(req)
+  const authHeader = req.headers.authorization
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  if (useAuth0 && token) {
+    try {
+      const claims = await validateAuth0Token(token)
+      return {
+        actorEmail: claims.email ?? `${claims.sub}@auth0`,
+        actorId: claims.sub,
+        ip
+      }
+    } catch {
+      return { actorEmail: 'anonymous', ip }
+    }
+  }
+  return { actorEmail: 'dev@legalmind.local', ip }
 }
 
 // --- Auth ---
@@ -175,7 +220,9 @@ app.get('/api/auth/me', async (req, res) => {
 })
 
 // --- Documents ---
-app.get('/api/documents', (_req, res) => {
+app.get('/api/documents', async (req, res) => {
+  const ctx = await getAuditContext(req)
+  pushAudit('document.list', ctx.actorEmail, {}, { ip: ctx.ip, actorId: ctx.actorId })
   res.json(Array.from(documents.values()).sort((a, b) => (a.uploadedAt < b.uploadedAt ? 1 : -1)))
 })
 
@@ -207,7 +254,8 @@ app.post('/api/documents/presign', async (req, res) => {
     sizeBytes: body.sizeBytes
   }
   documents.set(docId, record)
-  pushAudit('document.presign', undefined, { docId, filename: body.filename })
+  const presignCtx = await getAuditContext(req)
+  pushAudit('document.presign', presignCtx.actorEmail, { docId, filename: body.filename }, { ip: presignCtx.ip, actorId: presignCtx.actorId })
 
   if (s3Client && S3_BUCKET) {
     const key = `uploads/${docId}/${body.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`
@@ -236,14 +284,15 @@ app.post('/api/documents/presign', async (req, res) => {
   })
 })
 
-app.post('/api/documents/:documentId/confirm-upload', (req, res) => {
+app.post('/api/documents/:documentId/confirm-upload', async (req, res) => {
   const { documentId } = req.params
   const doc = documents.get(documentId)
   if (!doc) return res.status(404).json({ error: 'document not found' })
 
   doc.status = 'indexing'
   documents.set(documentId, doc)
-  pushAudit('document.uploaded.s3', undefined, { documentId })
+  const confirmCtx = await getAuditContext(req)
+  pushAudit('document.uploaded.s3', confirmCtx.actorEmail, { documentId }, { ip: confirmCtx.ip, actorId: confirmCtx.actorId })
 
   if (usePinecone && s3Client && S3_BUCKET && doc.s3Key) {
     indexDocumentFromS3(
@@ -363,18 +412,24 @@ app.put(
   }
 )
 
-app.get('/api/documents/:documentId', (req, res) => {
-  const doc = documents.get(req.params.documentId)
+app.get('/api/documents/:documentId', async (req, res) => {
+  const { documentId } = req.params
+  const doc = documents.get(documentId)
   if (!doc) return res.status(404).json({ error: 'document not found' })
+  const ctx = await getAuditContext(req)
+  pushAudit('document.view', ctx.actorEmail, { documentId, docName: doc.name }, { ip: ctx.ip, actorId: ctx.actorId })
   res.json(doc)
 })
 
 app.get('/api/documents/:documentId/pdf-url', async (req, res) => {
-  const doc = documents.get(req.params.documentId)
+  const { documentId } = req.params
+  const doc = documents.get(documentId)
   if (!doc) return res.status(404).json({ error: 'document not found' })
   if (!s3Client || !S3_BUCKET || !doc.s3Key) {
     return res.status(404).json({ error: 'PDF not available (uploaded locally or no S3)' })
   }
+  const ctx = await getAuditContext(req)
+  pushAudit('document.pdf_url', ctx.actorEmail, { documentId, docName: doc.name }, { ip: ctx.ip, actorId: ctx.actorId })
   try {
     const command = new GetObjectCommand({ Bucket: S3_BUCKET, Key: doc.s3Key })
     const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 })
@@ -467,7 +522,7 @@ app.post('/api/chat', async (req, res) => {
           id: `${c.documentId}_${i}`,
           documentId: c.documentId,
           docName: c.docName,
-          page: 1,
+          page: c.pageNumber ?? 1,
           snippet: c.text.slice(0, 400)
         }))
         res.write(JSON.stringify({ citations }) + '\n')

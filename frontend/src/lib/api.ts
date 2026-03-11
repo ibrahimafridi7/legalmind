@@ -20,7 +20,9 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.code === 'ERR_NETWORK' || err.message?.toLowerCase().includes('network')) {
-      toast.error('Network error or timeout. Please check your connection and retry.')
+      toast.error('Network error. Check your connection and retry.')
+    } else if (err.code === 'ECONNABORTED' || err.message?.toLowerCase().includes('timeout')) {
+      toast.error('Request timed out. Please try again.')
     } else if (err.response?.status === 401) {
       toast.error('Unauthorized. Please sign in again.')
     }

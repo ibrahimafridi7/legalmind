@@ -92,8 +92,13 @@ export const ChatWindow = ({
           </List>
         )}
       </div>
-      <div aria-live="polite" style={{ position: 'absolute', left: -9999, top: -9999 }}>
-        {isStreaming ? 'AI is typing' : ''}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="chat-typing-status"
+      >
+        {isStreaming ? 'AI is typing…' : '\u00A0'}
       </div>
       <form
         style={{ display: 'flex', gap: '8px', padding: '12px', flexShrink: 0 }}
@@ -103,13 +108,15 @@ export const ChatWindow = ({
         }}
       >
         <textarea
+          className="chat-input focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-action focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
           style={{ flex: 1, minHeight: 56, maxHeight: 56, resize: 'none', overflowY: 'auto' }}
           value={input}
           onChange={handleInputChange}
           placeholder="Ask a question about your matter, contract, or regulation…"
           rows={2}
+          aria-label="Chat message"
         />
-        <Button type="submit" disabled={isLoading}>
+        <Button type="submit" disabled={isLoading} aria-label={isLoading ? 'Sending' : 'Send message'}>
           {isLoading ? (
             <span className="flex items-center gap-2">
               <Spinner /> Sending

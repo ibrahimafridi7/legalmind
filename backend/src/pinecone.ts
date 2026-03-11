@@ -133,32 +133,65 @@ export async function indexDocumentFromS3(
     const buffer = await streamToBuffer(Body as NodeJS.ReadableStream)
 
     const pdfParse = (await import('pdf-parse')).default
-    const { text } = await pdfParse(buffer)
-    if (!text?.trim()) {
+    const pages: string[] = []
+    let result: { text: string; numpages?: number }
+    try {
+      result = await pdfParse(buffer, {
+        pagerender: (pageData: { getTextContent: (opts?: unknown) => Promise<{ items: Array<{ str?: string }> }> }) => {
+          return pageData.getTextContent().then((content) => {
+            const text = (content.items ?? []).map((item) => item.str ?? '').join(' ')
+            pages.push(text)
+            return text
+          })
+        }
+      })
+    } catch {
+      result = await pdfParse(buffer)
+    }
+    const numpages = result.numpages ?? Math.max(1, pages.length)
+    if (pages.length === 0 && result.text?.trim()) {
+      pages.push(result.text)
+    }
+    if (pages.length === 0 || !pages.some((p) => p?.trim())) {
       onStatus?.('ready')
       return
     }
 
-    const chunks = chunkText(text)
-    if (chunks.length === 0) {
+    type ChunkWithMeta = { text: string; pageNumber: number; paragraphIndex: number }
+    const chunksWithMeta: ChunkWithMeta[] = []
+    for (let p = 0; p < pages.length; p++) {
+      const pageChunks = chunkText(pages[p]!)
+      pageChunks.forEach((text, j) => {
+        chunksWithMeta.push({ text, pageNumber: p + 1, paragraphIndex: j })
+      })
+    }
+    if (chunksWithMeta.length === 0) {
       onStatus?.('ready')
       return
     }
 
-    const vectors = await embed(chunks)
+    const texts = chunksWithMeta.map((c) => c.text)
+    const vectors = await embed(texts)
+    const createdAt = new Date().toISOString()
     const index = pinecone.index(PINECONE_INDEX_NAME)
     const ns = index.namespace(NAMESPACE)
     await ns.upsert(
-      vectors.map((values, i) => ({
-        id: `${documentId}_${i}`,
-        values,
-        metadata: {
-          documentId,
-          docName: docName.slice(0, 500),
-          chunkIndex: i,
-          text: chunks[i]!.slice(0, 1000)
+      vectors.map((values, i) => {
+        const c = chunksWithMeta[i]!
+        return {
+          id: `${documentId}_${i}`,
+          values,
+          metadata: {
+            documentId,
+            docName: docName.slice(0, 500),
+            chunkIndex: i,
+            pageNumber: c.pageNumber,
+            paragraphIndex: c.paragraphIndex,
+            text: c.text.slice(0, 1000),
+            createdAt
+          }
         }
-      }))
+      })
     )
     onStatus?.('ready')
   } catch (err) {
@@ -182,6 +215,9 @@ export type RetrievedChunk = {
   docName: string
   text: string
   score?: number
+  pageNumber?: number
+  paragraphIndex?: number
+  createdAt?: string
 }
 
 export async function queryPinecone(query: string): Promise<RetrievedChunk[]> {
@@ -195,16 +231,32 @@ export async function queryPinecone(query: string): Promise<RetrievedChunk[]> {
     topK: TOP_K,
     includeMetadata: true
   })
-  type Match = { metadata?: { text?: unknown; documentId?: unknown; docName?: unknown }; score?: number }
+  type Match = {
+    metadata?: {
+      text?: unknown
+      documentId?: unknown
+      docName?: unknown
+      pageNumber?: unknown
+      paragraphIndex?: unknown
+      createdAt?: unknown
+    }
+    score?: number
+  }
   const matches = (result.matches ?? []) as Match[]
   return matches
     .filter((m: Match) => m.metadata?.text && m.metadata?.documentId)
-    .map((m: Match) => ({
-      documentId: String(m.metadata!.documentId),
-      docName: String(m.metadata!.docName ?? ''),
-      text: String(m.metadata!.text),
-      score: m.score
-    }))
+    .map((m: Match) => {
+      const meta = m.metadata!
+      return {
+        documentId: String(meta.documentId),
+        docName: String(meta.docName ?? ''),
+        text: String(meta.text),
+        score: m.score,
+        pageNumber: typeof meta.pageNumber === 'number' ? meta.pageNumber : undefined,
+        paragraphIndex: typeof meta.paragraphIndex === 'number' ? meta.paragraphIndex : undefined,
+        createdAt: typeof meta.createdAt === 'string' ? meta.createdAt : undefined
+      }
+    })
 }
 
 export async function streamGroundedAnswer(

@@ -9,18 +9,23 @@ ReactDOM.createRoot(document.getElementById('app') as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary
       fallbackRender={({ error, resetErrorBoundary }) => (
-        <div style={{ padding: 24 }}>
-          <h1 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Something went wrong</h1>
-          <pre style={{ whiteSpace: 'pre-wrap', color: '#94a3b8' }}>{String((error as any)?.message ?? error)}</pre>
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              toast('Resetting…')
-              resetErrorBoundary()
-            }}
-          >
-            Reset Chat
-          </button>
+        <div className="flex min-h-screen flex-col items-center justify-center bg-brand-dark p-6">
+          <div className="w-full max-w-md rounded-lg border border-slate-700 bg-brand-surface p-6 shadow-xl">
+            <h1 className="text-lg font-semibold text-slate-100">Something went wrong</h1>
+            <p className="mt-2 text-sm text-brand-muted">
+              {String((error as Error)?.message ?? error)}
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary mt-4 w-full"
+              onClick={() => {
+                toast.info('Resetting…')
+                resetErrorBoundary()
+              }}
+            >
+              Reset Chat
+            </button>
+          </div>
         </div>
       )}
     >

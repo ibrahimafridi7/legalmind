@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import api from '../lib/api'
 import { API_BASE_URL } from '../lib/config'
 import { getAuthToken } from '../lib/auth'
@@ -47,8 +48,13 @@ export function useDocumentStatusStream(enabled = true) {
           const dataLine = block.match(/data:\s*(.+)/s)?.[1]?.trim()
           if (event === 'document_indexed' && dataLine) {
             try {
-              JSON.parse(dataLine)
+              const payload = JSON.parse(dataLine) as { documentId?: string; status?: string }
               queryClient.invalidateQueries({ queryKey: ['documents'] })
+              if (payload.status === 'ready') {
+                toast.success('Document indexed and ready for search')
+              } else if (payload.status === 'failed') {
+                toast.error('Document indexing failed')
+              }
             } catch {
               /* ignore */
             }

@@ -5,8 +5,10 @@ export interface AuditLogDto {
   id: string
   at: string
   actorEmail: string
+  actorId?: string
   action: string
   metadata?: Record<string, unknown>
+  ip?: string
 }
 
 export const useAuditLogs = (limit = 100) =>

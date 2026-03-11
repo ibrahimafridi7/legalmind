@@ -13,11 +13,11 @@ export const FileUploadManager = () => {
   const presign = usePresignUpload()
   const docs = useDocuments()
   const [progress, setProgress] = useState<Record<string, number>>({})
-
-  if (!user || !canUpload(user.role)) return null
+  const showUpload = user && canUpload(user.role)
 
   return (
     <div className="space-y-4">
+      {showUpload && (
       <UploadDropzone
         onFilesAccepted={async (files) => {
           for (const file of files) {
@@ -64,6 +64,11 @@ export const FileUploadManager = () => {
           }
         }}
       />
+      )}
+
+      {user && !showUpload && (
+        <p className="text-xs text-brand-muted">Only Admin and Partner can upload documents. You can view the list below.</p>
+      )}
 
       <div className="space-y-2">
         {(docs.data ?? []).map((d) => (
