@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState, useEffect } from 'react'
+import { useRef, useCallback, useState, useEffect, useLayoutEffect } from 'react'
 import { VariableSizeList as List } from 'react-window'
 import type { ListChildComponentProps } from 'react-window'
 import type { ChatMessageWithCitations } from '../../hooks/useChat'
@@ -53,21 +53,22 @@ export const ChatWindow = ({
 
   const lastMessageContentLength = messages.length > 0 ? (messages[messages.length - 1]?.content?.length ?? 0) : 0
 
-  useEffect(() => {
+  // Keep latest message in view: when new message added or content streaming, stick to bottom
+  const scrollToBottom = useCallback(() => {
     if (messages.length === 0 || !listRef.current) return
     const list = listRef.current
-    const scrollToBottom = () => {
-      list.resetAfterIndex(0)
-      list.scrollToItem(messages.length - 1, 'end')
-    }
+    list.resetAfterIndex(0)
+    list.scrollToItem(messages.length - 1, 'end')
+  }, [messages.length])
+
+  useLayoutEffect(() => {
     scrollToBottom()
-    const rafId = requestAnimationFrame(scrollToBottom)
-    const t = setTimeout(scrollToBottom, 100)
-    return () => {
-      cancelAnimationFrame(rafId)
-      clearTimeout(t)
-    }
-  }, [messages.length, isStreaming, lastMessageContentLength])
+  }, [scrollToBottom, lastMessageContentLength, isStreaming])
+
+  useEffect(() => {
+    const t = setTimeout(scrollToBottom, 80)
+    return () => clearTimeout(t)
+  }, [scrollToBottom, lastMessageContentLength, isStreaming])
 
   const getItemSize = useCallback(
     (index: number) => estimateRowHeight(messages[index]),

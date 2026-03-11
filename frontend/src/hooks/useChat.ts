@@ -9,19 +9,23 @@ import type { ChatMessageWithCitations, Citation } from '../types/chat.types'
 export type { ChatMessageWithCitations } from '../types/chat.types'
 
 /** Map SDK UIMessage parts to our ChatMessageWithCitations shape. */
-function uiMessageToOurMessage(msg: { id: string; role: string; parts?: Array<{ type: string; text?: string; data?: Citation[] }> }): ChatMessageWithCitations {
+function uiMessageToOurMessage(msg: {
+  id: string
+  role: string
+  parts?: Array<{ type: string; text?: string; data?: unknown }>
+}): ChatMessageWithCitations {
   const parts = Array.isArray(msg.parts) ? msg.parts : []
   const content = parts
     .filter((p): p is { type: string; text: string } => p.type === 'text' && typeof p.text === 'string')
     .map((p) => p.text)
     .join('')
   const citationsPart = parts.find((p) => p.type === 'data-citations' && Array.isArray(p.data))
-  const citations = citationsPart?.data as Citation[] | undefined
+  const citations = (citationsPart?.data as Citation[] | undefined) ?? []
   return {
     id: msg.id,
     role: msg.role === 'user' ? 'user' : 'assistant',
     content,
-    ...(citations?.length ? { citations } : {})
+    ...(citations.length ? { citations } : {})
   }
 }
 
@@ -90,10 +94,11 @@ export const useLegalChat = (sessionId: string): UseLegalChatResult => {
     }
   }, [storedMessages, sdkMessages.length, setSdkMessages])
 
+  // Sync to persistence only when not streaming so scroll/layout don’t thrash during chunk stream
   useEffect(() => {
-    if (messages.length === 0) return
+    if (messages.length === 0 || isStreaming) return
     setPersistenceMessages(() => messages)
-  }, [messages, setPersistenceMessages])
+  }, [messages, isStreaming, setPersistenceMessages])
 
   const handleInputChange: UseLegalChatResult['handleInputChange'] = (e) => {
     setInput(e.target.value)
