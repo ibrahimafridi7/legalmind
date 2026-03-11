@@ -94,7 +94,28 @@ type AuditLog = {
 
 const app = express()
 app.set('trust proxy', 1)
-app.use(cors({ origin: true, credentials: true }))
+
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://legalmind-frontend-pi.vercel.app'
+]
+const CORS_ORIGIN = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
+  : ALLOWED_ORIGINS
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true)
+      if (CORS_ORIGIN.includes(origin)) return cb(null, true)
+      return cb(null, false)
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  })
+)
 app.use(express.json({ limit: '2mb' }))
 
 // Health check (for Railway / load balancers)
