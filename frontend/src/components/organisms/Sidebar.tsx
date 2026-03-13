@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useUIStore } from '../../store/uiStore'
+import { useSessionStore } from '../../store/sessionStore'
 import { Button } from '../ui/button'
 import {
   Dialog,
@@ -10,7 +11,7 @@ import {
   DialogTitle,
   DialogTrigger
 } from '../ui/dialog'
-import { PanelLeft, LogOut, Info, Menu } from 'lucide-react'
+import { PanelLeft, LogOut, Info, Menu, Plus, Star, Archive } from 'lucide-react'
 import { useAuth0 } from '@auth0/auth0-react'
 import { isAuth0Enabled } from '../../lib/auth'
 
@@ -31,6 +32,8 @@ function SidebarLogout() {
 export const Sidebar = () => {
   const { sidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore()
   const location = useLocation()
+  const { activeSessionId, sessions, setActiveSessionId, createSession, togglePinSession, archiveSession } =
+    useSessionStore()
 
   // Close overlay on route change only on tablet/mobile (overlay mode) so it doesn't stick
   useEffect(() => {
@@ -91,6 +94,81 @@ export const Sidebar = () => {
         <SidebarLink to="/chat" label="Chat" />
         <SidebarLink to="/documents" label="Documents" />
         <SidebarLink to="/audit-logs" label="Audit Logs" />
+        <div className="mt-4 border-t border-slate-800 pt-3">
+          <div className="mb-2 flex items-center justify-between px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <span>Conversations</span>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              aria-label="New chat"
+              onClick={() => {
+                const id = createSession()
+                setActiveSessionId(id)
+              }}
+            >
+              <Plus className="h-3 w-3" />
+            </Button>
+          </div>
+          <div className="flex max-h-40 flex-col gap-1 overflow-auto pr-1 text-xs">
+            {sessions
+              .filter((s) => !s.archived)
+              .sort((a, b) => {
+                if (a.pinned && !b.pinned) return -1
+                if (!a.pinned && b.pinned) return 1
+                return b.updatedAt.localeCompare(a.updatedAt)
+              })
+              .map((s) => {
+                const isActive = s.id === activeSessionId
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setActiveSessionId(s.id)}
+                    className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition ${
+                      isActive ? 'bg-slate-800 text-slate-100' : 'text-brand-muted hover:bg-slate-900 hover:text-slate-100'
+                    }`}
+                  >
+                    <span className="truncate">{s.name}</span>
+                    {s.pinned && <Star className="h-3 w-3 text-amber-400 shrink-0" />}
+                    <span className="ml-auto flex items-center gap-1 opacity-70">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          togglePinSession(s.id)
+                        }}
+                        aria-label={s.pinned ? 'Unpin chat' : 'Pin chat'}
+                        className="rounded p-0.5 hover:bg-slate-800"
+                      >
+                        <Star
+                          className={`h-3 w-3 ${s.pinned ? 'text-amber-400' : 'text-slate-500'}`}
+                          fill={s.pinned ? 'currentColor' : 'none'}
+                        />
+                      </button>
+                      {s.id !== 'demo' && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            archiveSession(s.id)
+                          }}
+                          aria-label="Archive chat"
+                          className="rounded p-0.5 hover:bg-slate-800"
+                        >
+                          <Archive className="h-3 w-3 text-slate-500" />
+                        </button>
+                      )}
+                    </span>
+                  </button>
+                )
+              })}
+            {sessions.filter((s) => !s.archived).length === 0 && (
+              <div className="px-1 py-1 text-[11px] text-brand-muted">No active chats. Start a new one.</div>
+            )}
+          </div>
+        </div>
       </nav>
       {isAuth0Enabled && (
         <div className="shrink-0 border-t border-slate-800 px-2 py-2">

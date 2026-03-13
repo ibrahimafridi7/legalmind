@@ -48,6 +48,10 @@ interface UseLegalChatResult {
   isStreaming: boolean
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
   handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void
+  canRegenerate: boolean
+  canEditResend: boolean
+  handleRegenerate: () => void
+  handleEditResend: () => void
 }
 
 export const useLegalChat = (sessionId: string): UseLegalChatResult => {
@@ -74,7 +78,8 @@ export const useLegalChat = (sessionId: string): UseLegalChatResult => {
     messages: sdkMessages,
     sendMessage,
     setMessages: setSdkMessages,
-    status
+    status,
+    regenerate
   } = useChat({
     id: sessionId,
     transport
@@ -87,6 +92,24 @@ export const useLegalChat = (sessionId: string): UseLegalChatResult => {
 
   const isLoading = status === 'submitted'
   const isStreaming = status === 'streaming'
+
+  const lastUserText: string | null = useMemo(() => {
+    const lastUser = [...sdkMessages].reverse().find((m) => m.role === 'user')
+    if (!lastUser || !Array.isArray((lastUser as any).parts)) return null
+    const parts = (lastUser as any).parts as Array<{ type: string; text?: string }>
+    const text = parts
+      .filter((p) => p.type === 'text' && typeof p.text === 'string')
+      .map((p) => p.text as string)
+      .join('')
+      .trim()
+    return text.length > 0 ? text : null
+  }, [sdkMessages])
+
+  const canRegenerate = useMemo(
+    () => messages.some((m) => m.role === 'assistant' && (m.content?.length ?? 0) > 0),
+    [messages]
+  )
+  const canEditResend = Boolean(lastUserText)
 
   useEffect(() => {
     if (storedMessages.length > 0 && sdkMessages.length === 0) {
@@ -112,5 +135,28 @@ export const useLegalChat = (sessionId: string): UseLegalChatResult => {
     sendMessage({ text }, { body: { sessionId } })
   }
 
-  return { messages, input, isLoading, isStreaming, handleInputChange, handleSubmit }
+  const handleRegenerate = () => {
+    if (!canRegenerate || isStreaming) return
+    const lastAssistant = [...sdkMessages].reverse().find((m) => m.role === 'assistant')
+    if (!lastAssistant) return
+    regenerate({ messageId: (lastAssistant as any).id, body: { sessionId } })
+  }
+
+  const handleEditResend = () => {
+    if (!canEditResend || !lastUserText) return
+    setInput(lastUserText)
+  }
+
+  return {
+    messages,
+    input,
+    isLoading,
+    isStreaming,
+    handleInputChange,
+    handleSubmit,
+    canRegenerate,
+    canEditResend,
+    handleRegenerate,
+    handleEditResend
+  }
 }

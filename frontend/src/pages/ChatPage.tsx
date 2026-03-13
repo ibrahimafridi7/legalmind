@@ -50,6 +50,10 @@ export const ChatPage = () => {
             handleSubmit={chat.handleSubmit}
             isLoading={chat.isLoading}
             isStreaming={chat.isStreaming}
+            canRegenerate={chat.canRegenerate}
+            canEditResend={chat.canEditResend}
+            onRegenerate={chat.handleRegenerate}
+            onEditResend={chat.handleEditResend}
           />
         </section>
         {/* Right: Sources + PDF (split-screen panel) */}

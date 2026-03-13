@@ -11,6 +11,10 @@ interface ChatWindowProps {
   handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void
   isLoading: boolean
   isStreaming: boolean
+  canRegenerate?: boolean
+  canEditResend?: boolean
+  onRegenerate?: () => void
+  onEditResend?: () => void
 }
 
 export const ChatWindow = ({
@@ -19,7 +23,11 @@ export const ChatWindow = ({
   handleInputChange,
   handleSubmit,
   isLoading,
-  isStreaming
+  isStreaming,
+  canRegenerate,
+  canEditResend,
+  onRegenerate,
+  onEditResend
 }: ChatWindowProps) => {
   const bottomSentinelRef = useRef<HTMLDivElement>(null)
   const prevMessageCountRef = useRef(0)
@@ -81,7 +89,7 @@ export const ChatWindow = ({
         {isStreaming ? 'AI is responding' : ''}
       </div>
       <form
-        className="flex shrink-0 flex-wrap gap-2 p-3 sm:p-4"
+        className="flex shrink-0 flex-wrap items-end gap-2 p-3 sm:p-4"
         onSubmit={(e) => {
           e.preventDefault()
           handleSubmit(e)
@@ -95,15 +103,35 @@ export const ChatWindow = ({
           rows={2}
           aria-label="Chat message"
         />
-        <Button type="submit" disabled={isLoading} aria-label={isLoading ? 'Sending' : 'Send message'}>
-          {isLoading ? (
-            <span className="flex items-center gap-2">
-              <Spinner /> Sending
-            </span>
-          ) : (
-            'Send'
-          )}
-        </Button>
+        <div className="flex flex-col items-stretch gap-1">
+          <Button type="submit" disabled={isLoading} aria-label={isLoading ? 'Sending' : 'Send message'}>
+            {isLoading ? (
+              <span className="flex items-center gap-2">
+                <Spinner /> Sending
+              </span>
+            ) : (
+              'Send'
+            )}
+          </Button>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              className="text-[11px] text-brand-muted underline-offset-2 hover:underline disabled:opacity-40"
+              onClick={onRegenerate}
+              disabled={!canRegenerate || isLoading || isStreaming}
+            >
+              Regenerate
+            </button>
+            <button
+              type="button"
+              className="text-[11px] text-brand-muted underline-offset-2 hover:underline disabled:opacity-40"
+              onClick={onEditResend}
+              disabled={!canEditResend || isLoading}
+            >
+              Edit &amp; resend
+            </button>
+          </div>
+        </div>
       </form>
     </div>
   )
