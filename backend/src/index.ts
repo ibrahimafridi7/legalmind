@@ -218,10 +218,12 @@ app.get('/api/auth/me', async (req, res) => {
   if (useAuth0 && token) {
     try {
       const claims = await validateAuth0Token(token)
+      const email = claims.email ?? `${claims.sub}@auth0`
+      pushAudit('LOGIN', email, { role: claims.role }, { actorId: claims.sub })
       return res.json({
         id: claims.sub,
         name: claims.name ?? claims.email ?? 'User',
-        email: claims.email ?? `${claims.sub}@auth0`,
+        email,
         role: claims.role as Role
       })
     } catch (err) {
@@ -235,6 +237,7 @@ app.get('/api/auth/me', async (req, res) => {
   }
 
   // Dev stub when Auth0 is not configured
+  pushAudit('LOGIN', 'dev@legalmind.local', { role: (process.env.DEV_ROLE as Role) ?? 'admin' })
   res.json({
     id: 'user_dev',
     name: 'Dev User',
@@ -304,7 +307,7 @@ app.post('/api/documents/presign', async (req, res) => {
   }
   documents.set(docId, record)
   const presignCtx = await getAuditContext(req)
-  pushAudit('document.presign', presignCtx.actorEmail, { docId, filename: body.filename }, { ip: presignCtx.ip, actorId: presignCtx.actorId })
+  pushAudit('UPLOAD_DOCUMENT', presignCtx.actorEmail, { documentId: docId, filename: body.filename }, { ip: presignCtx.ip, actorId: presignCtx.actorId })
 
   if (s3Client && S3_BUCKET) {
     const key = `uploads/${docId}/${body.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`
@@ -341,7 +344,7 @@ app.post('/api/documents/:documentId/confirm-upload', async (req, res) => {
   doc.status = 'indexing'
   documents.set(documentId, doc)
   const confirmCtx = await getAuditContext(req)
-  pushAudit('document.uploaded.s3', confirmCtx.actorEmail, { documentId }, { ip: confirmCtx.ip, actorId: confirmCtx.actorId })
+  pushAudit('UPLOAD_DOCUMENT', confirmCtx.actorEmail, { documentId }, { ip: confirmCtx.ip, actorId: confirmCtx.actorId })
 
   if (usePinecone && s3Client && S3_BUCKET && doc.s3Key) {
     indexDocumentFromS3(
@@ -384,7 +387,7 @@ app.put(
 
     doc.status = 'indexing'
     documents.set(documentId, doc)
-    pushAudit('document.uploaded', undefined, { documentId, bytes: (req.body as Buffer).byteLength })
+    pushAudit('UPLOAD_DOCUMENT', undefined, { documentId, bytes: (req.body as Buffer).byteLength })
 
     setTimeout(() => {
       const current = documents.get(documentId)
@@ -440,7 +443,7 @@ app.put(
       uploadChunks.delete(documentId)
       doc.status = 'indexing'
       documents.set(documentId, doc)
-      pushAudit('document.uploaded.chunked', undefined, { documentId, totalChunks, bytes: state.receivedBytes })
+      pushAudit('UPLOAD_DOCUMENT', undefined, { documentId, totalChunks, bytes: state.receivedBytes })
 
       setTimeout(() => {
         const current = documents.get(documentId)
@@ -466,7 +469,7 @@ app.get('/api/documents/:documentId', async (req, res) => {
   const doc = documents.get(documentId)
   if (!doc) return res.status(404).json({ error: 'document not found' })
   const ctx = await getAuditContext(req)
-  pushAudit('document.view', ctx.actorEmail, { documentId, docName: doc.name }, { ip: ctx.ip, actorId: ctx.actorId })
+  pushAudit('VIEW_DOCUMENT', ctx.actorEmail, { documentId, docName: doc.name }, { ip: ctx.ip, actorId: ctx.actorId })
   res.json(doc)
 })
 
@@ -491,7 +494,7 @@ app.get('/api/documents/:documentId/pdf-url', async (req, res) => {
     return res.status(404).json({ error: 'PDF not available (uploaded locally or no S3)' })
   }
   const ctx = await getAuditContext(req)
-  pushAudit('document.pdf_url', ctx.actorEmail, { documentId, docName: doc.name }, { ip: ctx.ip, actorId: ctx.actorId })
+  pushAudit('VIEW_DOCUMENT', ctx.actorEmail, { documentId, docName: doc.name }, { ip: ctx.ip, actorId: ctx.actorId })
   try {
     const command = new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3Key })
     const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 })
@@ -502,11 +505,32 @@ app.get('/api/documents/:documentId/pdf-url', async (req, res) => {
   }
 })
 
-// --- Audit logs ---
+app.delete('/api/documents/:documentId', async (req, res) => {
+  const { documentId } = req.params
+  const doc = documents.get(documentId)
+  if (!doc) return res.status(404).json({ error: 'document not found' })
+  const ctx = await getAuditContext(req)
+  documents.delete(documentId)
+  uploadChunks.delete(documentId)
+  pushAudit('DELETE_DOCUMENT', ctx.actorEmail, { documentId, docName: doc.name }, { ip: ctx.ip, actorId: ctx.actorId })
+  res.status(200).json({ ok: true })
+})
+
+// --- Audit logs (pagination + filters for production-style compliance) ---
 app.get('/api/audit-logs', (req, res) => {
   try {
-    const limit = Math.min(Number(req.query.limit ?? 100), 500)
-    res.json(Array.isArray(auditLogs) ? auditLogs.slice(0, limit) : [])
+    const limit = Math.min(Math.max(1, Number(req.query.limit ?? 100)), 500)
+    const cursor = typeof req.query.cursor === 'string' ? req.query.cursor.trim() : undefined
+    const actionFilter = typeof req.query.action === 'string' ? req.query.action.trim() : undefined
+    const actorEmailFilter = typeof req.query.actorEmail === 'string' ? req.query.actorEmail.trim().toLowerCase() : undefined
+
+    let list = Array.isArray(auditLogs) ? [...auditLogs] : []
+    if (actionFilter) list = list.filter((e) => e.action === actionFilter)
+    if (actorEmailFilter) list = list.filter((e) => (e.actorEmail ?? '').toLowerCase().includes(actorEmailFilter))
+    if (cursor) list = list.filter((e) => e.at < cursor)
+    const page = list.slice(0, limit)
+    const nextCursor = list.length > limit ? page[page.length - 1]?.at : undefined
+    res.json({ logs: page, nextCursor })
   } catch (err) {
     console.warn('[audit-logs]', err)
     res.status(500).json({ error: 'Failed to load audit logs' })
@@ -635,7 +659,7 @@ app.post('/api/chat', async (req, res) => {
   const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
   const textBlockId = `text_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
 
-  pushAudit('chat.stream.start', undefined, { qLen: q.length, protocol: 'sse' })
+  pushAudit('CHAT_QUERY', undefined, { qLen: q.length, protocol: 'sse' })
 
   if (q.length === 0) {
     writeSSE(res, { type: 'start', messageId })
