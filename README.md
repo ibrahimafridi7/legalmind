@@ -219,6 +219,9 @@ To use Auth0 instead of dev-mode login:
 
 5. Restart frontend and backend. “Continue with SSO” will redirect to Auth0; after login, the backend validates the JWT and returns the user (role from custom claim `https://legalmind.app/role` or Auth0 rule, else `associate`).
 
+For the demo, audit logs are stored in memory.
+In production they would be persisted in PostgreSQL.
+
 ## RAG (Pinecone + OpenAI)
 
 For answers grounded in your uploaded PDFs:
