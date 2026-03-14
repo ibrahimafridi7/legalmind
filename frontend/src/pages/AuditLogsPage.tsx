@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { FixedSizeList as List } from 'react-window'
 import type { ListChildComponentProps } from 'react-window'
 import { Sidebar } from '../components/organisms/Sidebar'
@@ -8,7 +8,8 @@ import { Button } from '../components/atoms/Button'
 
 const ROW_HEIGHT = 52
 const TABLE_HEIGHT = 420
-const GRID_COLS = 'minmax(140px, 1fr) minmax(120px, 1fr) minmax(120px, 1fr) minmax(160px, 2fr)'
+const GRID_COLS = '140px 120px 120px 1fr'
+const TABLE_MIN_WIDTH = 520
 
 function formatDetails(log: AuditLogDto): string {
   const parts: string[] = []
@@ -34,20 +35,22 @@ function AuditRow({ index, style, data }: ListChildComponentProps<AuditLogDto[]>
         gridTemplateColumns: GRID_COLS,
         alignItems: 'center',
         gap: 0,
-        minWidth: 0
+        minWidth: 0,
+        boxSizing: 'border-box',
+        padding: '8px 12px'
       }}
       className="border-b border-slate-800 bg-brand-surface/50 text-sm"
     >
-      <div className="truncate px-3 py-2 text-slate-300" title={new Date(log.at).toISOString()}>
+      <div className="truncate text-slate-300" title={new Date(log.at).toISOString()}>
         {new Date(log.at).toLocaleString()}
       </div>
-      <div className="min-w-0 truncate px-3 py-2 text-slate-300" title={log.actorEmail}>
+      <div className="min-w-0 truncate text-slate-300" title={log.actorEmail}>
         {log.actorEmail}
       </div>
-      <div className="min-w-0 truncate px-3 py-2 text-slate-300" title={log.action}>
+      <div className="min-w-0 truncate text-slate-300" title={log.action}>
         {log.action}
       </div>
-      <div className="min-w-0 truncate px-3 py-2 text-slate-400" title={details}>
+      <div className="min-w-0 truncate text-slate-400" title={details}>
         {details}
       </div>
     </div>
@@ -57,6 +60,8 @@ function AuditRow({ index, style, data }: ListChildComponentProps<AuditLogDto[]>
 export const AuditLogsPage = () => {
   const [actionFilter, setActionFilter] = useState<string>('')
   const [actorEmailFilter, setActorEmailFilter] = useState('')
+  const [tableWidth, setTableWidth] = useState(TABLE_MIN_WIDTH)
+  const tableRef = useRef<HTMLDivElement>(null)
 
   const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } = useAuditLogs({
     limit: 100,
@@ -65,6 +70,16 @@ export const AuditLogsPage = () => {
   })
 
   const logs = data?.pages.flatMap((p) => p.logs) ?? []
+
+  useEffect(() => {
+    const el = tableRef.current
+    if (!el) return
+    const update = () => setTableWidth(Math.max(TABLE_MIN_WIDTH, el.getBoundingClientRect().width))
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   return (
     <div className="layout-root">
@@ -107,24 +122,25 @@ export const AuditLogsPage = () => {
         {isError && <p className="mt-4 text-sm text-red-400">Failed to load audit logs.</p>}
         {isLoading && <p className="mt-4 text-sm text-brand-muted">Loading…</p>}
         {logs.length > 0 && (
-          <div className="mt-4 w-full min-w-0 overflow-hidden rounded-lg border border-slate-700">
+          <div ref={tableRef} className="mt-4 w-full min-w-0 overflow-hidden rounded-lg border border-slate-700">
             <div className="overflow-x-auto">
               <div
                 className="grid shrink-0 border-b border-slate-700 bg-slate-800/50 px-3 py-2 text-left text-sm font-medium text-slate-200"
-                style={{ gridTemplateColumns: GRID_COLS, minWidth: 520 }}
+                style={{ width: tableWidth, gridTemplateColumns: GRID_COLS }}
               >
-                <div>Time</div>
+                <div className="truncate">Time</div>
                 <div className="min-w-0 truncate">Actor</div>
                 <div className="min-w-0 truncate">Action</div>
                 <div className="min-w-0 truncate">Details</div>
               </div>
               <List
                 height={Math.min(TABLE_HEIGHT, logs.length * ROW_HEIGHT)}
-                width={800}
+                width={tableWidth}
                 itemCount={logs.length}
                 itemSize={ROW_HEIGHT}
                 itemData={logs}
                 overscanCount={8}
+                style={{ overflowX: 'hidden' }}
               >
                 {AuditRow}
               </List>
